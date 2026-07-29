@@ -267,6 +267,8 @@ def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=10):
     send_at_command(ser, "ATE0", timeout=2)
     # Enable verbose error reporting
     send_at_command(ser, "AT+CMEE=2", timeout=2)
+    # Force full RF & SIM functionality (exit minimum functionality / flight mode)
+    send_at_command(ser, "AT+CFUN=1", timeout=3)
     return ser
 
 
@@ -478,13 +480,14 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 ser.close()
                 raise HTTPException(status_code=502, detail="SIM800L hardware not responding")
                 
-            # Wait for SIM card to finish initializing if busy
+            # Wait for SIM card to finish initializing if busy or in CFUN 0/4 state
             for attempt in range(5):
                 cpin = query_at_command(ser, "AT+CPIN?", timeout=2)
                 if cpin and "READY" in cpin:
                     break
-                if cpin and "SIM busy" in cpin:
-                    logger.info(f"SIM card is busy initializing (attempt {attempt+1}/5), waiting 2 seconds...")
+                if cpin and ("CFUN state" in cpin or "SIM busy" in cpin):
+                    logger.info(f"SIM card in busy/CFUN state (attempt {attempt+1}/5), executing AT+CFUN=1 and waiting 2s...")
+                    send_at_command(ser, "AT+CFUN=1", timeout=3)
                     time.sleep(2)
                 else:
                     break
