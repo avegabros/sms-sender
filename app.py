@@ -157,6 +157,37 @@ def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
         )
     return api_key
 
+def verify_api_key_or_dashboard(
+    api_key: str = Security(API_KEY_HEADER),
+    credentials: HTTPBasicCredentials = Depends(security_basic)
+):
+    if api_key:
+        if not SMS_SENDER_API_KEY or api_key == SMS_SENDER_API_KEY:
+            return api_key
+        keys_data = load_keys()
+        if api_key in keys_data.values():
+            return api_key
+            
+    if DASHBOARD_PASSWORD:
+        if credentials:
+            user_input = credentials.username.strip() if credentials.username else ""
+            pass_input = credentials.password.strip() if credentials.password else ""
+            if secrets.compare_digest(user_input, DASHBOARD_USERNAME) and secrets.compare_digest(pass_input, DASHBOARD_PASSWORD):
+                return "dashboard"
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": 'Basic realm="SMS Sender Gateway"'},
+        )
+        
+    if not SMS_SENDER_API_KEY and not DASHBOARD_PASSWORD:
+        return "public"
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid or missing API Key or Dashboard Auth"
+    )
+
 def verify_admin_key(api_key: str = Security(API_KEY_HEADER)):
     if SMS_SENDER_API_KEY:
         if api_key != SMS_SENDER_API_KEY:
@@ -447,7 +478,7 @@ def get_history_page(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)
     summary="Get SMS dispatch history & metrics",
     description="Retrieves a list of all recorded SMS dispatch attempts, along with summary counts for credit tracking."
 )
-def get_sms_history(api_key: str = Depends(verify_api_key)):
+def get_sms_history(auth: str = Depends(verify_api_key_or_dashboard)):
     history = load_history()
     success_count = sum(1 for item in history if item.get("status") == "success")
     failed_count = sum(1 for item in history if item.get("status") == "failed")
