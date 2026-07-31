@@ -290,10 +290,47 @@ def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=10):
     ser = serial.Serial(port, baud, timeout=timeout)
     ser.reset_input_buffer()
     ser.reset_output_buffer()
-    # Send ESC to cancel any active SMS input prompt
-    ser.write(b'\x1b')
-    time.sleep(0.2)
+    
+    # Send ESC to cancel any active SMS input prompt (> prompt)
+    ser.write(b'\x1b\r\n')
+    time.sleep(0.3)
     ser.read_all()
+    
+    # Auto-baud sync sequence: Send 'AT' multiple times to lock SIM800L auto-bauding
+    synced = False
+    for attempt in range(5):
+        ser.reset_input_buffer()
+        ser.write(b'AT\r\n')
+        time.sleep(0.3)
+        res = ser.read_all().decode(errors="ignore")
+        if "OK" in res or "AT" in res:
+            synced = True
+            logger.info("SIM800L serial sync successful")
+            break
+            
+    # If sync failed, SIM800L may have locked onto Pi bootloader noise at 115200 baud
+    if not synced:
+        logger.warning("Failed 9600 baud sync. Attempting 115200 baud recovery...")
+        try:
+            ser.baudrate = 115200
+            for attempt in range(3):
+                ser.reset_input_buffer()
+                ser.write(b'AT+IPR=9600\r\n')
+                time.sleep(0.3)
+                res = ser.read_all().decode(errors="ignore")
+                if "OK" in res or "AT" in res:
+                    logger.info("Forced SIM800L back from 115200 to 9600 baud")
+                    break
+        except Exception as e:
+            logger.error(f"Baud recovery exception: {e}")
+        finally:
+            ser.baudrate = baud
+            time.sleep(0.3)
+
+    # Permanently lock baud rate to 9600 in SIM800L non-volatile memory (EEPROM)
+    send_at_command(ser, "AT+IPR=9600", timeout=2)
+    send_at_command(ser, "AT&W", timeout=2)
+
     # Disable local echo to prevent command loops/responses in output
     send_at_command(ser, "ATE0", timeout=2)
     # Enable verbose error reporting
