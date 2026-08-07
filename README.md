@@ -103,11 +103,15 @@ Before launching the Docker container, enable the physical GPIO serial UART on y
 The API service runs on port `8080`:
 
 * **Web Dashboard**: `http://[YOUR_PI_IP]:8080/`
-  * Graphical interface for configuring API keys, testing SMS dispatch, and viewing real-time terminal logs.
+  * Graphical interface for configuring API keys, testing SMS dispatch, resetting SIM800L hardware, and viewing real-time terminal logs.
+* **Received SMS Inbox**: `http://[YOUR_PI_IP]:8080/inbox`
+  * Real-time received SMS inbox viewer, unread metrics, search filtering, and deletion.
 * **SMS History & Credit Tracker**: `http://[YOUR_PI_IP]:8080/history`
-  * Displays dispatch history, credit usage metrics, search/filtering, request origin tracking (`Dashboard` vs `App Name`), and CSV export.
+  * Displays dispatch history, credit usage metrics, fast SQL search/filtering, and CSV export.
 * **Multi-Language Integration Guide**: `http://[YOUR_PI_IP]:8080/integration`
   * Interactive code customizers and pre-built code snippets for **Node.js**, **TypeScript**, **PHP (cURL & Guzzle)**, **Laravel**, **CodeIgniter 3 & 4**, **Python**, and **cURL CLI**.
+* **System Architecture Document**: For deep architectural details, see [ARCHITECTURE.md](file:///d:/code/sms-sender/ARCHITECTURE.md).
+
 
 ---
 

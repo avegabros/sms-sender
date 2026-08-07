@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMS Sender API - Dispatch History</title>
+  <title>SMS Sender Gateway - Received Inbox</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,18 +44,12 @@
     header {
       width: 100%;
       max-width: 1000px;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
       gap: 1rem;
-    }
-
-    .logo-container {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
     }
 
     h1 {
@@ -66,214 +60,6 @@
 
     h1 span.logo-highlight {
       color: var(--primary);
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .nav-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      font-weight: 500;
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      color: var(--text);
-      text-decoration: none;
-      transition: all 0.2s ease;
-    }
-
-    .nav-btn:hover {
-      background: #27272a;
-      border-color: #3f3f46;
-    }
-
-    main {
-      width: 100%;
-      max-width: 1000px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
-
-    @media (min-width: 640px) {
-      .metrics-grid {
-        grid-template-columns: repeat(3, 1fr);
-      }
-    }
-
-    .metric-card {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .metric-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .metric-value {
-      font-size: 1.85rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .metric-value.success {
-      color: var(--success);
-    }
-
-    .metric-value.error {
-      color: var(--error);
-    }
-
-    .metric-value.primary {
-      color: var(--primary);
-    }
-
-    .card {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
-      padding: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    }
-
-    .table-header-controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .search-input {
-      background: #09090b;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      color: var(--text);
-      padding: 0.65rem 0.85rem;
-      font-family: var(--font-sans);
-      font-size: 0.875rem;
-      width: 100%;
-      max-width: 320px;
-    }
-
-    .search-input:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-
-    .action-btn {
-      background: #27272a;
-      border: 1px solid var(--card-border);
-      color: var(--text);
-      padding: 0.55rem 0.9rem;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: all 0.2s ease;
-    }
-
-    .action-btn:hover {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: white;
-    }
-
-    .table-wrapper {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.875rem;
-      text-align: left;
-    }
-
-    th {
-      border-bottom: 1px solid var(--card-border);
-      padding: 0.75rem 0.5rem;
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    td {
-      padding: 0.85rem 0.5rem;
-      border-bottom: 1px solid var(--card-border);
-      vertical-align: middle;
-    }
-
-    .badge-status {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.2rem 0.6rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .badge-status.success {
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(34, 197, 94, 0.3);
-    }
-
-    .badge-status.failed {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--error);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    .code-text {
-      font-family: var(--font-mono);
-      font-size: 0.82rem;
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      padding: 0.75rem 1.25rem;
-      border-radius: 8px;
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-left: 4px solid var(--success);
-      color: var(--text);
-      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
-      transform: translateY(100px);
-      opacity: 0;
-      transition: all 0.3s ease;
-      z-index: 100;
-      font-size: 0.875rem;
     }
 
     .nav-tabs-container {
@@ -320,50 +106,197 @@
       background: var(--primary);
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
+
+    main {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .metric-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .metric-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .metric-value {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .metric-value.primary { color: var(--primary); }
+    .metric-value.success { color: var(--success); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .table-header-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      background: #09090b;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0.6rem 0.85rem;
+      font-size: 0.9rem;
+      flex-grow: 1;
+      max-width: 400px;
+    }
+
+    .action-btn {
+      background: #27272a;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.5rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      background: #3f3f46;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      text-align: left;
+    }
+
+    th {
+      border-bottom: 1px solid var(--card-border);
+      padding: 0.75rem 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 0.85rem 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      vertical-align: middle;
+    }
+
+    .code-text {
+      font-family: var(--font-mono);
+    }
+
+    .badge-webhook {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-webhook.delivered { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-webhook.none { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; border: 1px solid rgba(161, 161, 170, 0.3); }
+    .badge-webhook.failed { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--success);
+      color: var(--text);
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100;
+      font-size: 0.875rem;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div class="logo-container">
-      <h1><span class="logo-highlight">SMS</span> Dispatch History</h1>
+      <h1><span class="logo-highlight">SMS</span> Received Inbox</h1>
     </div>
   </header>
 
   <nav class="nav-tabs-container">
     <div class="nav-tabs">
       <a href="/" class="tab-item">🎛️ Dashboard</a>
-      <a href="/inbox" class="tab-item">📥 Received Inbox</a>
-      <a href="/history" class="tab-item active">📜 Dispatch History</a>
+      <a href="/inbox" class="tab-item active">📥 Received Inbox</a>
+      <a href="/history" class="tab-item">📜 Dispatch History</a>
       <a href="/integration" class="tab-item">📖 Integration Guide</a>
     </div>
   </nav>
-
-
 
   <main>
     <!-- Summary Metrics -->
     <div class="metrics-grid">
       <div class="metric-card">
-        <div class="metric-label">Total Messages Sent (Credits Used)</div>
-        <div class="metric-value success" id="metric-success">0</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Total Dispatched Requests</div>
+        <div class="metric-label">Total Received Messages</div>
         <div class="metric-value primary" id="metric-total">0</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Failed Attempts</div>
-        <div class="metric-value error" id="metric-failed">0</div>
+        <div class="metric-label">Unread Messages</div>
+        <div class="metric-value success" id="metric-unread">0</div>
       </div>
     </div>
 
-    <!-- History Table Card -->
+    <!-- Inbox Table Card -->
     <div class="card">
       <div class="table-header-controls">
-        <input type="text" class="search-input" id="search-input" placeholder="Search by phone number or message...">
+        <input type="text" class="search-input" id="search-input" placeholder="Search by sender or message text...">
         <div style="display: flex; gap: 0.5rem;">
-          <button class="action-btn" id="export-csv-btn">📥 Export CSV</button>
           <button class="action-btn" id="refresh-btn">🔄 Refresh</button>
         </div>
       </div>
@@ -373,17 +306,16 @@
           <thead>
             <tr>
               <th>Timestamp</th>
-              <th>Source / App</th>
-              <th>Recipient Number</th>
-              <th>Message Body</th>
-              <th>Status</th>
-              <th>Carrier Reference</th>
+              <th>Sender Number</th>
+              <th>Received Message Body</th>
+              <th>Webhook Status</th>
+              <th style="text-align: right;">Action</th>
             </tr>
           </thead>
-          <tbody id="history-table-body">
+          <tbody id="inbox-table-body">
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                Loading SMS dispatch history...
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Loading received SMS inbox...
               </td>
             </tr>
           </tbody>
@@ -421,10 +353,9 @@
     let currentSearch = '';
     let searchDebounceTimer = null;
 
-    const historyTableBody = document.getElementById('history-table-body');
+    const inboxTableBody = document.getElementById('inbox-table-body');
     const searchInput = document.getElementById('search-input');
     const refreshBtn = document.getElementById('refresh-btn');
-    const exportCsvBtn = document.getElementById('export-csv-btn');
     const prevPageBtn = document.getElementById('prev-page-btn');
     const nextPageBtn = document.getElementById('next-page-btn');
     const pageInfoText = document.getElementById('page-info-text');
@@ -433,11 +364,9 @@
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toast-msg');
 
-    const metricSuccess = document.getElementById('metric-success');
     const metricTotal = document.getElementById('metric-total');
-    const metricFailed = document.getElementById('metric-failed');
+    const metricUnread = document.getElementById('metric-unread');
 
-    // Helper to construct safe API URLs without embedded credentials
     function getApiUrl(path) {
       return window.location.origin + path;
     }
@@ -448,7 +377,7 @@
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
-    async function loadHistory(page = 1) {
+    async function loadInbox(page = 1) {
       currentPage = page;
       const apiKey = localStorage.getItem('sms_sender_api_key');
       const headers = {};
@@ -456,10 +385,10 @@
         headers['X-API-Key'] = apiKey;
       }
 
-      historyTableBody.innerHTML = `
+      inboxTableBody.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            Loading SMS dispatch history...
+          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            Loading received SMS inbox...
           </td>
         </tr>
       `;
@@ -473,23 +402,19 @@
           queryParams.append('search', currentSearch);
         }
 
-        const response = await fetch(getApiUrl(`/api/history?${queryParams.toString()}`), { headers });
-
+        const response = await fetch(getApiUrl(`/api/inbox?${queryParams.toString()}`), { headers });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         const data = await response.json();
         
-        const records = data.history || [];
-        const stats = data.stats || { total: 0, success: 0, failed: 0 };
+        const records = data.records || [];
+        const stats = data.stats || { total: 0, unread: 0 };
         const pagination = data.pagination || { page: 1, limit: 50, total_records: 0, total_pages: 1 };
         
-        // Update summary metric counters
-        metricSuccess.textContent = stats.success.toLocaleString();
         metricTotal.textContent = stats.total.toLocaleString();
-        metricFailed.textContent = stats.failed.toLocaleString();
+        metricUnread.textContent = stats.unread.toLocaleString();
 
-        // Update pagination UI
         pageInfoText.textContent = `Page ${pagination.page} of ${pagination.total_pages}`;
         recordsSummaryText.textContent = `Showing ${records.length} of ${pagination.total_records.toLocaleString()} records`;
         
@@ -498,10 +423,10 @@
 
         renderTable(records);
       } catch (err) {
-        historyTableBody.innerHTML = `
+        inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; color: var(--error); padding: 2rem;">
-              Failed to load history (${err.message}). Make sure your API Key is saved in the Dashboard.
+            <td colspan="5" style="text-align: center; color: var(--error); padding: 2rem;">
+              Failed to load inbox (${err.message}). Make sure your API Key is saved in the Dashboard.
             </td>
           </tr>
         `;
@@ -510,40 +435,67 @@
 
     function renderTable(records) {
       if (records.length === 0) {
-        historyTableBody.innerHTML = `
+        inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-              No SMS dispatch records found.
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              No received SMS messages found in inbox.
             </td>
           </tr>
         `;
         return;
       }
 
-      historyTableBody.innerHTML = records.map(item => {
-        const isSuccess = item.status === 'success';
+      inboxTableBody.innerHTML = records.map(item => {
         const formattedTime = new Date(item.timestamp).toLocaleString();
-        const appName = item.app_name || 'Dashboard';
+        const hookStatus = item.webhook_status || 'none';
         
         return `
           <tr>
             <td class="code-text" style="color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
+            <td class="code-text" style="font-weight: 600; white-space: nowrap; color: var(--primary);">${escapeHtml(item.sender)}</td>
+            <td style="max-width: 350px; word-break: break-word;">${escapeHtml(item.message)}</td>
             <td>
-              <span style="background: #27272a; border: 1px solid var(--card-border); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.78rem; font-weight: 500; color: var(--primary); white-space: nowrap;">
-                ${escapeHtml(appName)}
+              <span class="badge-webhook ${hookStatus}">
+                ${escapeHtml(hookStatus)}
               </span>
             </td>
-            <td class="code-text" style="font-weight: 600; white-space: nowrap;">${escapeHtml(item.phone_number)}</td>
-            <td style="max-width: 300px; word-break: break-word;">${escapeHtml(item.message)}</td>
-            <td>
-              <span class="badge-status ${isSuccess ? 'success' : 'failed'}">
-                ${isSuccess ? 'Success' : 'Failed'}
-              </span>
+            <td style="text-align: right;">
+              <button class="delete-btn" data-id="${item.id}" style="background:none; border:none; color:var(--error); cursor:pointer; font-weight:600; font-size:0.85rem;">Delete</button>
             </td>
-            <td class="code-text" style="color: #34d399; font-size: 0.8rem;">${escapeHtml(item.raw_response || '-')}</td>
           </tr>
         `;
       }).join('');
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const id = e.target.dataset.id;
+          if (confirm('Delete this received SMS from inbox?')) {
+            await deleteMessage(id);
+          }
+        });
+      });
+    }
+
+    async function deleteMessage(id) {
+      const apiKey = localStorage.getItem('sms_sender_api_key');
+      const headers = {};
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+      try {
+        const response = await fetch(getApiUrl(`/api/inbox/${id}`), {
+          method: 'DELETE',
+          headers: headers
+        });
+        if (response.ok) {
+          showToast('Message deleted');
+          loadInbox(currentPage);
+        } else {
+          showToast('Delete failed');
+        }
+      } catch (err) {
+        showToast('Error deleting message');
+      }
     }
 
     function escapeHtml(str) {
@@ -551,94 +503,36 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
 
-    // Debounced Search Filter Handler
     searchInput.addEventListener('input', () => {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = setTimeout(() => {
         currentSearch = searchInput.value.trim();
-        loadHistory(1);
+        loadInbox(1);
       }, 300);
     });
 
     limitSelect.addEventListener('change', () => {
       currentLimit = parseInt(limitSelect.value, 10);
-      loadHistory(1);
+      loadInbox(1);
     });
 
     prevPageBtn.addEventListener('click', () => {
       if (currentPage > 1) {
-        loadHistory(currentPage - 1);
+        loadInbox(currentPage - 1);
       }
     });
 
     nextPageBtn.addEventListener('click', () => {
-      loadHistory(currentPage + 1);
+      loadInbox(currentPage + 1);
     });
 
     refreshBtn.addEventListener('click', () => {
-      loadHistory(currentPage);
-      showToast('Refreshed history');
+      loadInbox(currentPage);
+      showToast('Refreshed inbox');
     });
 
-    // Export CSV handler (fetches all filtered records from backend)
-    exportCsvBtn.addEventListener('click', async () => {
-      exportCsvBtn.disabled = true;
-      exportCsvBtn.textContent = '⌛ Exporting...';
-      showToast('Preparing CSV export...');
-
-      try {
-        const apiKey = localStorage.getItem('sms_sender_api_key');
-        const headers = {};
-        if (apiKey) {
-          headers['X-API-Key'] = apiKey;
-        }
-
-        const queryParams = new URLSearchParams({ export_all: 'true' });
-        if (currentSearch) {
-          queryParams.append('search', currentSearch);
-        }
-
-        const response = await fetch(getApiUrl(`/api/history?${queryParams.toString()}`), { headers });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        const exportData = data.history || [];
-
-        if (exportData.length === 0) {
-          showToast('No records to export');
-          return;
-        }
-
-        const csvHeaders = ['Timestamp', 'Source / App', 'Phone Number', 'Message', 'Status', 'Carrier Response'];
-        const rows = exportData.map(item => [
-          `"${item.timestamp}"`,
-          `"${item.app_name || 'Dashboard'}"`,
-          `"${item.phone_number}"`,
-          `"${(item.message || '').replace(/"/g, '""')}"`,
-          `"${item.status}"`,
-          `"${(item.raw_response || '').replace(/"/g, '""')}"`
-        ]);
-
-        const csvContent = 'data:text/csv;charset=utf-8,' + [csvHeaders.join(','), ...rows.map(r => r.join(','))].join('\n');
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement('a');
-        link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `sms_history_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast('CSV downloaded successfully');
-      } catch (err) {
-        showToast(`Export failed: ${err.message}`);
-      } finally {
-        exportCsvBtn.disabled = false;
-        exportCsvBtn.textContent = '📥 Export CSV';
-      }
-    });
-
-    loadHistory(1);
+    loadInbox(1);
+    setInterval(() => loadInbox(currentPage), 15000);
   </script>
 </body>
 </html>
-

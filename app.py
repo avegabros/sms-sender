@@ -113,8 +113,21 @@ def init_db():
             )
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS inbox (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                message TEXT NOT NULL,
+                read_status INTEGER DEFAULT 0,
+                webhook_status TEXT DEFAULT 'none'
+            )
+        """)
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inbox_timestamp ON inbox(timestamp DESC)")
         conn.commit()
+
 
         # Migrate legacy json files if present
         KEYS_FILE = "data/api_keys.json"
@@ -234,6 +247,205 @@ def load_history_paginated(page=1, limit=50, search=None, export_all=False):
         except Exception as e:
             logger.error(f"Error reading paginated history from DB: {e}")
             return {"records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 1}}
+
+import re
+import urllib.request
+import urllib.error
+
+def parse_cmgl_response(raw_text):
+    messages = []
+    if not raw_text or "+CMGL:" not in raw_text:
+        return messages
+
+    pattern = re.compile(r'\+CMGL:\s*(\d+),\s*"([^"]+)",\s*"([^"]+)",\s*"(?:[^"]*)",\s*"([^"]+)"')
+    lines = raw_text.splitlines()
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        match = pattern.search(line)
+        if match:
+            idx = int(match.group(1))
+            status_str = match.group(2)
+            sender = match.group(3)
+            time_str = match.group(4)
+            
+            body_lines = []
+            i += 1
+            while i < len(lines):
+                next_line = lines[i]
+                if next_line.startswith("+CMGL:") or next_line.strip() in ("OK", "ERROR"):
+                    i -= 1
+                    break
+                body_lines.append(next_line)
+                i += 1
+                
+            body = "\n".join(body_lines).strip()
+            
+            try:
+                ts_parts = time_str.split(",")
+                date_p = ts_parts[0].split("/")
+                time_p = ts_parts[1].split("+")[0].split("-")[0]
+                iso_ts = f"20{date_p[0]}-{date_p[1]}-{date_p[2]}T{time_p}"
+            except Exception:
+                iso_ts = datetime.datetime.now().isoformat()
+                
+            messages.append({
+                "index": idx,
+                "status_str": status_str,
+                "sender": sender,
+                "timestamp": iso_ts,
+                "message": body
+            })
+        i += 1
+
+    return messages
+
+def dispatch_webhook(payload):
+    webhook_url = os.getenv("WEBHOOK_URL")
+    if not webhook_url or not webhook_url.strip():
+        return "none"
+    try:
+        req_data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url.strip(),
+            data=req_data,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "sms-sender-gateway/1.0"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            logger.info(f"Successfully posted webhook payload to {webhook_url} (HTTP {resp.status})")
+            return "delivered"
+    except Exception as e:
+        logger.error(f"Failed to post webhook to {webhook_url}: {e}")
+        return f"failed: {str(e)}"
+
+def save_inbox_message(msg):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            msg_id = f"inbox_{int(time.time())}_{secrets.token_hex(4)}"
+            webhook_status = dispatch_webhook({
+                "event": "sms_received",
+                "id": msg_id,
+                "sender": msg["sender"],
+                "message": msg["message"],
+                "timestamp": msg["timestamp"]
+            })
+            cursor.execute(
+                """
+                INSERT INTO inbox (id, timestamp, sender, message, read_status, webhook_status)
+                VALUES (?, ?, ?, ?, 0, ?)
+                """,
+                (
+                    msg_id,
+                    msg["timestamp"],
+                    msg["sender"],
+                    msg["message"],
+                    webhook_status
+                )
+            )
+            conn.commit()
+            conn.close()
+            logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database")
+        except Exception as e:
+            logger.error(f"Error saving incoming SMS to inbox: {e}")
+
+def poll_inbox_messages():
+    with serial_lock:
+        try:
+            ser = get_serial_device(timeout=5)
+            send_at_command(ser, "AT+CMGF=1", timeout=3)
+            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=5)
+            if raw_res and "+CMGL:" in raw_res:
+                parsed_messages = parse_cmgl_response(raw_res)
+                if parsed_messages:
+                    logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
+                    for msg in parsed_messages:
+                        save_inbox_message(msg)
+                    # Delete read messages from SIM card memory to keep SIM memory clean
+                    send_at_command(ser, "AT+CMGD=1,4", timeout=3)
+            ser.close()
+        except Exception as e:
+            logger.debug(f"Inbox poll cycle: {e}")
+
+def load_inbox_paginated(page=1, limit=50, search=None):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            where_clause = ""
+            params = []
+            if search and search.strip():
+                where_clause = "WHERE sender LIKE ? OR message LIKE ?"
+                pattern = f"%{search.strip()}%"
+                params = [pattern, pattern]
+                
+            cursor.execute(f"SELECT COUNT(*) FROM inbox {where_clause}", params)
+            total_records = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM inbox WHERE read_status = 0")
+            unread_records = cursor.fetchone()[0]
+
+            offset = (page - 1) * limit
+            cursor.execute(
+                f"SELECT id, timestamp, sender, message, read_status, webhook_status FROM inbox {where_clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                params + [limit, offset]
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            
+            total_pages = (total_records + limit - 1) // limit if limit > 0 else 1
+            
+            return {
+                "stats": {"total": total_records, "unread": unread_records},
+                "records": [dict(row) for row in rows],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total_records": total_records,
+                    "total_pages": max(1, total_pages)
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error reading inbox from DB: {e}")
+            return {"stats": {"total": 0, "unread": 0}, "records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 1}}
+
+def delete_inbox_message(msg_id):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM inbox WHERE id = ?", (msg_id,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting inbox message: {e}")
+            return False
+
+def background_inbox_poller():
+    logger.info("Background SIM800L Inbox Poller active")
+    while True:
+        try:
+            time.sleep(15)
+            poll_inbox_messages()
+        except Exception as e:
+            logger.error(f"Background inbox poller error: {e}")
+
+# Launch background poller thread
+inbox_thread = threading.Thread(target=background_inbox_poller, daemon=True)
+inbox_thread.start()
+
 
 def load_history():
     res = load_history_paginated(page=1, limit=1000)
@@ -754,6 +966,44 @@ def reset_hardware_module(auth: str = Depends(verify_api_key_or_dashboard)):
 
 
 @app.get(
+    "/inbox",
+    response_class=HTMLResponse,
+    include_in_schema=False
+)
+def get_inbox_page(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)):
+    try:
+        with open("static/inbox.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"<h3>Error loading inbox page: {str(e)}</h3>", status_code=500)
+
+@app.get(
+    "/api/inbox",
+    response_model=dict,
+    tags=["SMS Operations"],
+    summary="Get received SMS inbox messages",
+    description="Retrieves a paginated list of all SMS text messages received by the SIM800L module."
+)
+def get_inbox_messages(
+    page: int = 1,
+    limit: int = 50,
+    search: str = None,
+    auth: str = Depends(verify_api_key_or_dashboard)
+):
+    return load_inbox_paginated(page=page, limit=limit, search=search)
+
+@app.delete(
+    "/api/inbox/{msg_id}",
+    tags=["SMS Operations"],
+    summary="Delete received SMS from inbox",
+    description="Deletes an inbox record by ID."
+)
+def delete_inbox_msg(msg_id: str, auth: str = Depends(verify_api_key_or_dashboard)):
+    if delete_inbox_message(msg_id):
+        return {"success": True, "message": f"Message {msg_id} deleted"}
+    raise HTTPException(status_code=404, detail="Message not found")
+
+@app.get(
     "/history",
     response_class=HTMLResponse,
     include_in_schema=False
@@ -764,6 +1014,7 @@ def get_history_page(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)
             return HTMLResponse(content=f.read(), status_code=200)
     except Exception as e:
         return HTMLResponse(content=f"<h3>Error loading history page: {str(e)}</h3>", status_code=500)
+
 
 @app.get(
     "/api/history",

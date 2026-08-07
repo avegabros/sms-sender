@@ -17,6 +17,8 @@ services:
       - DASHBOARD_USERNAME=${DASHBOARD_USERNAME:-}
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
       - RESET_GPIO_PIN=${RESET_GPIO_PIN:-17}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+
     volumes:
       - ./data:/app/data
       # Map sysfs GPIO interface for hardware pin resets (if wired)
