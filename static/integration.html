@@ -330,20 +330,71 @@
       transform: translateY(0);
       opacity: 1;
     }
+
+    .nav-tabs-container {
+      width: 100%;
+      max-width: 960px;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      padding: 4px;
+      border-radius: 10px;
+      gap: 4px;
+      width: 100%;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .tab-item {
+      flex: 1;
+      text-align: center;
+      padding: 0.55rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 7px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+
+    .tab-item:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-item.active {
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div class="logo-container">
-      <h1><span class="logo-highlight">SMS</span> Sender Integration Guide</h1>
+      <h1><span class="logo-highlight">SMS</span> Integration Guide</h1>
     </div>
     <div class="nav-links">
-      <a href="/" class="nav-btn">← Back to Dashboard</a>
-      <a href="/history" class="nav-btn">📜 SMS History</a>
-      <a href="/docs" class="nav-btn primary" target="_blank">OpenAPI Docs</a>
+      <a href="/docs" class="nav-btn primary" target="_blank">OpenAPI Docs ↗</a>
     </div>
   </header>
+
+  <nav class="nav-tabs-container">
+    <div class="nav-tabs">
+      <a href="/" class="tab-item">🎛️ Dashboard</a>
+      <a href="/history" class="tab-item">📜 Dispatch History</a>
+      <a href="/integration" class="tab-item active">📖 Integration Guide</a>
+    </div>
+  </nav>
 
   <main>
     <!-- Interactive Config Card -->

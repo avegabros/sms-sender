@@ -267,25 +267,94 @@
       border-left: 4px solid var(--success);
     }
 
-    .toast-error {
-      border-left: 4px solid var(--error);
+    .nav-tabs-container {
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      padding: 4px;
+      border-radius: 10px;
+      gap: 4px;
+      width: 100%;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .tab-item {
+      flex: 1;
+      text-align: center;
+      padding: 0.55rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 7px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+
+    .tab-item:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-item.active {
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-reset {
+      color: #f87171;
+      background: #27272a;
+      border: 1px solid #450a0a;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.4rem 0.85rem;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-reset:hover {
+      background: #3f0f0f;
+      border-color: #ef4444;
     }
   </style>
 </head>
 <body>
 
   <header>
-    <h1><span class="logo-highlight">SMS</span> Sender</h1>
-    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-      <a href="/history" style="color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; background: #27272a; border: 1px solid var(--card-border); transition: all 0.2s ease;">📜 SMS History</a>
-      <a href="/integration" style="color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; background: #27272a; border: 1px solid var(--card-border); transition: all 0.2s ease;">📖 Integration Guide</a>
-      <button id="reset-sim800-btn" style="color: #f87171; background: #27272a; border: 1px solid #450a0a; cursor: pointer; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; display: inline-flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;">🔄 Reset SIM800L</button>
+    <h1><span class="logo-highlight">SMS</span> Sender Gateway</h1>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <button id="reset-sim800-btn" class="btn-reset">🔄 Reset SIM800L</button>
       <div class="badge" id="status-badge">
         <div class="badge-dot" id="status-dot"></div>
         <span id="status-text">Checking Status...</span>
       </div>
     </div>
   </header>
+
+  <nav class="nav-tabs-container">
+    <div class="nav-tabs">
+      <a href="/" class="tab-item active">🎛️ Dashboard</a>
+      <a href="/history" class="tab-item">📜 Dispatch History</a>
+      <a href="/integration" class="tab-item">📖 Integration Guide</a>
+    </div>
+  </nav>
+
 
 
   <main>
