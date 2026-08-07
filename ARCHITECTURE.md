@@ -12,13 +12,13 @@ The `sms-sender` system bridges standard web client applications (Node.js, Pytho
 ```mermaid
 graph TD
     Client["Client Applications / Systems"] -->|HTTP / HTTPS REST| Proxy["Nginx Proxy / Cloudflare"]
-    Proxy -->|Port 8080| App["FastAPI Application (Container)"]
+    Proxy -->|Port 8080| App["FastAPI Application - Container"]
     
-    subgraph Container ["Docker Container (/app)"]
+    subgraph Container ["Docker Container - app"]
         App --> Auth["API Key & Basic Auth Guard"]
-        App --> DB["SQLite Database (data/sms_sender.db)"]
+        App --> DB["SQLite Database - data/sms_sender.db"]
         App --> Worker["Background Inbox Poller Thread"]
-        App --> Serial["Thread-Safe Serial Lock (threading.Lock)"]
+        App --> Serial["Thread-Safe Serial Lock - threading.Lock"]
     end
     
     Serial -->|UART /dev/ttyAMA0| SIM800L["SIM800L Cellular Transceiver"]
@@ -31,18 +31,19 @@ graph TD
 ## 2. Hardware Architecture & Wiring
 
 ### 2.1 Raspberry Pi 5 & SIM800L Interface
+
 The SIM800L module operates at **3.4V – 4.4V** (optimal **4.0V DC**) and requires peak transient currents of up to **2.0 Amps** during cellular transmission bursts.
 
 ```mermaid
 flowchart LR
-    power["5V / 12V External Power"] --> buck["LM2596 Buck Converter (Adjusted to 4.0V)"]
+    power["5V / 12V External Power"] --> buck["LM2596 Buck Converter - 4.0V"]
     buck -->|4.0V VCC| sim["SIM800L VCC Pin"]
     buck -->|GND| sim["SIM800L GND Pin"]
     
-    pi5["Raspberry Pi 5"] -->|Pin 6 GND| sim["SIM800L GND (Common Ground)"]
-    pi5 -->|Pin 8 TXD (GPIO 14)| sim["SIM800L RXD"]
-    pi5 -->|Pin 10 RXD (GPIO 15)| sim["SIM800L TXD"]
-    pi5 -->|Pin 11 (GPIO 17)| sim["SIM800L RST (Hardware Reset)"]
+    pi5["Raspberry Pi 5"] -->|Pin 6 GND| sim["SIM800L GND - Common Ground"]
+    pi5 -->|Pin 8 TXD - GPIO 14| sim["SIM800L RXD"]
+    pi5 -->|Pin 10 RXD - GPIO 15| sim["SIM800L TXD"]
+    pi5 -->|Pin 11 - GPIO 17| sim["SIM800L RST - Hardware Reset"]
 ```
 
 ### 2.2 Complete Pin Map Table
@@ -64,6 +65,7 @@ flowchart LR
 ## 3. Software Component Architecture
 
 ### 3.1 Core Layers
+
 1. **ASGI Application Server**: Uvicorn running FastAPI (Python 3.11).
 2. **Security & Authentication Layer**:
    - `HTTPBasicCredentials` guard for Web Dashboard routes (`/`, `/inbox`, `/history`, `/integration`, `/docs`).
@@ -178,7 +180,6 @@ sequenceDiagram
     Note over SIM: SIM Memory cleared (0/20 capacity)
 ```
 
-
 ---
 
 ## 6. Network & Reverse Proxy Architecture
@@ -211,7 +212,6 @@ graph LR
 | **`GET`** | `/api/keys` | Master Admin Key | Lists all registered application API keys. |
 | **`POST`** | `/api/keys` | Master Admin Key | Generates a new application API key. |
 | **`DELETE`** | `/api/keys/{name}` | Master Admin Key | Revokes an application API key. |
-
 
 ---
 
