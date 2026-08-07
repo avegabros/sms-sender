@@ -199,20 +199,65 @@ Fetch or update gateway blacklist rules, auto-delete spam rules, webhook target,
 
 ---
 
-### 5. SMS History & Metrics
-Retrieves dispatch history logs and credit tracking summary counts.
+## Multi-App Webhook Setup & Security
+
+### How `X-Webhook-Secret` Signature Works
+To prevent unauthorized parties from posting fake SMS webhooks to your application server, set a `webhook_secret` in Gateway Settings.
+
+`sms-sender` attaches an `X-Webhook-Secret` header to every HTTP POST webhook request:
 
 ```http
-GET http://[YOUR_PI_IP]:8080/api/history
-X-API-Key: your_client_or_master_api_key
+POST /webhook/sms-received HTTP/1.1
+Content-Type: application/json
+X-Webhook-Secret: your_configured_secret_here
+
+{
+  "event": "sms_received",
+  "id": "inbox_1723045800_a1b2",
+  "sender": "+639171234567",
+  "message": "APPROVE 123",
+  "timestamp": "2026-08-07T16:12:00+08:00"
+}
+```
+
+#### Verifying Secret in Node.js Express:
+```javascript
+app.post('/webhook/sms-received', (req, res) => {
+  const secret = req.headers['x-webhook-secret'];
+  if (secret !== 'your_configured_secret_here') {
+    return res.status(401).json({ error: 'Unauthorized webhook signature' });
+  }
+
+  const { sender, message } = req.body;
+  // Process message...
+  res.status(200).json({ status: 'success' });
+});
 ```
 
 ---
 
-### 6. Admin API Key Management
-Generate, list, and revoke application API keys. Requires the Master Admin Key (`SMS_SENDER_API_KEY`).
+### How Webhooks Work with Multiple Web Applications
 
-* **List API Keys**: `GET /api/keys`
-* **Create Client Key**: `POST /api/keys` (`{"app_name": "trace-app"}`)
-* **Revoke Client Key**: `DELETE /api/keys/{app_name}`
+When multiple web applications share the same `sms-sender` gateway, use one of the 3 approaches below:
+
+#### Method A: Comma-Separated Broadcast Webhooks (Native Multi-URL)
+You can configure multiple target URLs in Gateway Settings separated by commas:
+`https://app1.com/webhook/sms, https://app2.com/webhook/sms`
+
+`sms-sender` automatically broadcasts every incoming SMS payload to **all** listed application URLs simultaneously. Each app checks if the message belongs to its database.
+
+#### Method B: Central Router Endpoint
+Point `WEBHOOK_URL` to a central router (e.g. `https://api.abas.ph/webhook/sms-router`). The central router inspects the incoming text message or sender phone number and dispatches the payload to the responsible microservice.
+
+#### Method C: REST API Inbox Polling (`GET /api/inbox`)
+Client applications fetch received SMS messages on demand by querying `GET /api/inbox` using their assigned application `X-API-Key`.
+
+---
+
+## Data Retention & Cleanup Policy
+
+The gateway includes an automated daily background task that cleans up old database records:
+* Configurable via `retention_days` setting (`7 Days`, `30 Days`, `90 Days`, or `Never (0)`).
+* Automatically purges records from `history` and `inbox` SQLite tables older than the cutoff threshold to maintain database speed.
+
 

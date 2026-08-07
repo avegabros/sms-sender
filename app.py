@@ -394,32 +394,42 @@ def should_auto_delete_inbox(sender, message):
     return False, ""
 
 def dispatch_webhook(payload):
-    webhook_url = get_setting("webhook_url", os.getenv("WEBHOOK_URL", ""))
+    webhook_url_str = get_setting("webhook_url", os.getenv("WEBHOOK_URL", ""))
     webhook_secret = get_setting("webhook_secret", "")
     
-    if not webhook_url or not webhook_url.strip():
+    if not webhook_url_str or not webhook_url_str.strip():
         return "none"
-    try:
-        req_headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "sms-sender-gateway/1.0"
-        }
-        if webhook_secret and webhook_secret.strip():
-            req_headers["X-Webhook-Secret"] = webhook_secret.strip()
+        
+    urls = [u.strip() for u in webhook_url_str.split(",") if u.strip()]
+    if not urls:
+        return "none"
 
-        req_data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            webhook_url.strip(),
-            data=req_data,
-            headers=req_headers,
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            logger.info(f"Successfully posted webhook payload to {webhook_url} (HTTP {resp.status})")
-            return "delivered"
-    except Exception as e:
-        logger.error(f"Failed to post webhook to {webhook_url}: {e}")
-        return f"failed: {str(e)}"
+    statuses = []
+    for webhook_url in urls:
+        try:
+            req_headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "sms-sender-gateway/1.0"
+            }
+            if webhook_secret and webhook_secret.strip():
+                req_headers["X-Webhook-Secret"] = webhook_secret.strip()
+
+            req_data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                webhook_url,
+                data=req_data,
+                headers=req_headers,
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                logger.info(f"Successfully posted webhook payload to {webhook_url} (HTTP {resp.status})")
+                statuses.append("delivered")
+        except Exception as e:
+            logger.error(f"Failed to post webhook to {webhook_url}: {e}")
+            statuses.append("failed")
+
+    return ", ".join(statuses)
+
 
 def save_inbox_message(msg):
     should_filter, reason = should_auto_delete_inbox(msg["sender"], msg["message"])
