@@ -169,20 +169,76 @@ def init_db():
 # Initialize DB on module startup
 init_db()
 
-def load_history():
+def get_history_stats():
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) as success,
+                    COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed
+                FROM history
+            """)
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return {"total": row[0], "success": row[1], "failed": row[2]}
+        except Exception as e:
+            logger.error(f"Error reading stats from DB: {e}")
+    return {"total": 0, "success": 0, "failed": 0}
+
+def load_history_paginated(page=1, limit=50, search=None, export_all=False):
     init_db()
     with db_lock:
         try:
             conn = sqlite3.connect(DB_FILE)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT id, timestamp, phone_number, message, status, raw_response, app_name FROM history ORDER BY timestamp DESC LIMIT 10000")
+            
+            where_clause = ""
+            params = []
+            if search and search.strip():
+                where_clause = "WHERE phone_number LIKE ? OR message LIKE ? OR app_name LIKE ?"
+                pattern = f"%{search.strip()}%"
+                params = [pattern, pattern, pattern]
+                
+            count_sql = f"SELECT COUNT(*) FROM history {where_clause}"
+            cursor.execute(count_sql, params)
+            total_records = cursor.fetchone()[0]
+
+            if export_all:
+                sql = f"SELECT id, timestamp, phone_number, message, status, raw_response, app_name FROM history {where_clause} ORDER BY timestamp DESC LIMIT 50000"
+                cursor.execute(sql, params)
+            else:
+                offset = (page - 1) * limit
+                sql = f"SELECT id, timestamp, phone_number, message, status, raw_response, app_name FROM history {where_clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+                cursor.execute(sql, params + [limit, offset])
+                
             rows = cursor.fetchall()
             conn.close()
-            return [dict(row) for row in rows]
+            
+            total_pages = (total_records + limit - 1) // limit if limit > 0 else 1
+            
+            return {
+                "records": [dict(row) for row in rows],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total_records": total_records,
+                    "total_pages": max(1, total_pages)
+                }
+            }
         except Exception as e:
-            logger.error(f"Error reading history from SQLite DB: {e}")
-            return []
+            logger.error(f"Error reading paginated history from DB: {e}")
+            return {"records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 1}}
+
+def load_history():
+    res = load_history_paginated(page=1, limit=1000)
+    return res["records"]
+
 
 def add_history_record(record):
     init_db()
@@ -716,18 +772,21 @@ def get_history_page(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)
     summary="Get SMS dispatch history & metrics",
     description="Retrieves a list of all recorded SMS dispatch attempts, along with summary counts for credit tracking."
 )
-def get_sms_history(auth: str = Depends(verify_api_key_or_dashboard)):
-    history = load_history()
-    success_count = sum(1 for item in history if item.get("status") == "success")
-    failed_count = sum(1 for item in history if item.get("status") == "failed")
+def get_sms_history(
+    page: int = 1,
+    limit: int = 50,
+    search: str = None,
+    export_all: bool = False,
+    auth: str = Depends(verify_api_key_or_dashboard)
+):
+    stats = get_history_stats()
+    result = load_history_paginated(page=page, limit=limit, search=search, export_all=export_all)
     return {
-        "stats": {
-            "total": len(history),
-            "success": success_count,
-            "failed": failed_count
-        },
-        "history": history
+        "stats": stats,
+        "pagination": result["pagination"],
+        "history": result["records"]
     }
+
 
 @app.post(
     "/send-sms",

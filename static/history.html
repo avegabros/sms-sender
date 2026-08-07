@@ -387,6 +387,25 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--card-border); flex-wrap: wrap; gap: 0.75rem;">
+        <div style="font-size: 0.85rem; color: var(--text-muted);" id="records-summary-text">
+          Showing 0 records
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <select id="limit-select" style="background: #09090b; border: 1px solid var(--card-border); color: var(--text); padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.85rem;">
+            <option value="25">25 per page</option>
+            <option value="50" selected>50 per page</option>
+            <option value="100">100 per page</option>
+          </select>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button class="action-btn" id="prev-page-btn" disabled style="padding: 0.35rem 0.75rem;">← Prev</button>
+            <span style="font-size: 0.85rem; font-weight: 500;" id="page-info-text">Page 1 of 1</span>
+            <button class="action-btn" id="next-page-btn" disabled style="padding: 0.35rem 0.75rem;">Next →</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -395,12 +414,20 @@
   </div>
 
   <script>
-    let fullHistoryData = [];
+    let currentPage = 1;
+    let currentLimit = 50;
+    let currentSearch = '';
+    let searchDebounceTimer = null;
 
     const historyTableBody = document.getElementById('history-table-body');
     const searchInput = document.getElementById('search-input');
     const refreshBtn = document.getElementById('refresh-btn');
     const exportCsvBtn = document.getElementById('export-csv-btn');
+    const prevPageBtn = document.getElementById('prev-page-btn');
+    const nextPageBtn = document.getElementById('next-page-btn');
+    const pageInfoText = document.getElementById('page-info-text');
+    const recordsSummaryText = document.getElementById('records-summary-text');
+    const limitSelect = document.getElementById('limit-select');
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toast-msg');
 
@@ -414,29 +441,54 @@
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
-    async function loadHistory() {
+    async function loadHistory(page = 1) {
+      currentPage = page;
       const apiKey = localStorage.getItem('sms_sender_api_key');
       const headers = {};
       if (apiKey) {
         headers['X-API-Key'] = apiKey;
       }
 
+      historyTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            Loading SMS dispatch history...
+          </td>
+        </tr>
+      `;
+
       try {
-        const response = await fetch('/api/history', { headers });
+        const queryParams = new URLSearchParams({
+          page: currentPage,
+          limit: currentLimit
+        });
+        if (currentSearch) {
+          queryParams.append('search', currentSearch);
+        }
+
+        const response = await fetch(`/api/history?${queryParams.toString()}`, { headers });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         const data = await response.json();
         
-        fullHistoryData = data.history || [];
-        
-        // Update stats
+        const records = data.history || [];
         const stats = data.stats || { total: 0, success: 0, failed: 0 };
+        const pagination = data.pagination || { page: 1, limit: 50, total_records: 0, total_pages: 1 };
+        
+        // Update summary metric counters
         metricSuccess.textContent = stats.success.toLocaleString();
         metricTotal.textContent = stats.total.toLocaleString();
         metricFailed.textContent = stats.failed.toLocaleString();
 
-        renderTable(fullHistoryData);
+        // Update pagination UI
+        pageInfoText.textContent = `Page ${pagination.page} of ${pagination.total_pages}`;
+        recordsSummaryText.textContent = `Showing ${records.length} of ${pagination.total_records.toLocaleString()} records`;
+        
+        prevPageBtn.disabled = pagination.page <= 1;
+        nextPageBtn.disabled = pagination.page >= pagination.total_pages;
+
+        renderTable(records);
       } catch (err) {
         historyTableBody.innerHTML = `
           <tr>
@@ -467,13 +519,13 @@
         
         return `
           <tr>
-            <td class="code-text" style="color: var(--text-muted); font-size: 0.8rem;">${formattedTime}</td>
+            <td class="code-text" style="color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
             <td>
-              <span style="background: #27272a; border: 1px solid var(--card-border); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.78rem; font-weight: 500; color: var(--primary);">
+              <span style="background: #27272a; border: 1px solid var(--card-border); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.78rem; font-weight: 500; color: var(--primary); white-space: nowrap;">
                 ${escapeHtml(appName)}
               </span>
             </td>
-            <td class="code-text" style="font-weight: 600;">${escapeHtml(item.phone_number)}</td>
+            <td class="code-text" style="font-weight: 600; white-space: nowrap;">${escapeHtml(item.phone_number)}</td>
             <td style="max-width: 300px; word-break: break-word;">${escapeHtml(item.message)}</td>
             <td>
               <span class="badge-status ${isSuccess ? 'success' : 'failed'}">
@@ -491,67 +543,94 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
 
-    // Search filter handler
+    // Debounced Search Filter Handler
     searchInput.addEventListener('input', () => {
-      const q = searchInput.value.toLowerCase().trim();
-      if (!q) {
-        renderTable(fullHistoryData);
-        return;
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        currentSearch = searchInput.value.trim();
+        loadHistory(1);
+      }, 300);
+    });
+
+    limitSelect.addEventListener('change', () => {
+      currentLimit = parseInt(limitSelect.value, 10);
+      loadHistory(1);
+    });
+
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        loadHistory(currentPage - 1);
       }
-      const filtered = fullHistoryData.filter(item => 
-        (item.phone_number && item.phone_number.toLowerCase().includes(q)) ||
-        (item.message && item.message.toLowerCase().includes(q)) ||
-        (item.app_name && item.app_name.toLowerCase().includes(q)) ||
-        (item.raw_response && item.raw_response.toLowerCase().includes(q))
-      );
-      renderTable(filtered);
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      loadHistory(currentPage + 1);
     });
 
     refreshBtn.addEventListener('click', () => {
-      loadHistory();
+      loadHistory(currentPage);
       showToast('Refreshed history');
     });
 
-    // Export CSV handler
-    exportCsvBtn.addEventListener('click', () => {
-      if (fullHistoryData.length === 0) {
-        showToast('No records to export');
-        return;
+    // Export CSV handler (fetches all filtered records from backend)
+    exportCsvBtn.addEventListener('click', async () => {
+      exportCsvBtn.disabled = true;
+      exportCsvBtn.textContent = '⌛ Exporting...';
+      showToast('Preparing CSV export...');
+
+      try {
+        const apiKey = localStorage.getItem('sms_sender_api_key');
+        const headers = {};
+        if (apiKey) {
+          headers['X-API-Key'] = apiKey;
+        }
+
+        const queryParams = new URLSearchParams({ export_all: 'true' });
+        if (currentSearch) {
+          queryParams.append('search', currentSearch);
+        }
+
+        const response = await fetch(`/api/history?${queryParams.toString()}`, { headers });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const exportData = data.history || [];
+
+        if (exportData.length === 0) {
+          showToast('No records to export');
+          return;
+        }
+
+        const csvHeaders = ['Timestamp', 'Source / App', 'Phone Number', 'Message', 'Status', 'Carrier Response'];
+        const rows = exportData.map(item => [
+          `"${item.timestamp}"`,
+          `"${item.app_name || 'Dashboard'}"`,
+          `"${item.phone_number}"`,
+          `"${(item.message || '').replace(/"/g, '""')}"`,
+          `"${item.status}"`,
+          `"${(item.raw_response || '').replace(/"/g, '""')}"`
+        ]);
+
+        const csvContent = 'data:text/csv;charset=utf-8,' + [csvHeaders.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `sms_history_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('CSV downloaded successfully');
+      } catch (err) {
+        showToast(`Export failed: ${err.message}`);
+      } finally {
+        exportCsvBtn.disabled = false;
+        exportCsvBtn.textContent = '📥 Export CSV';
       }
-
-      const headers = ['Timestamp', 'Source / App', 'Phone Number', 'Message', 'Status', 'Carrier Response'];
-      const rows = fullHistoryData.map(item => [
-        `"${item.timestamp}"`,
-        `"${item.app_name || 'Dashboard'}"`,
-        `"${item.phone_number}"`,
-        `"${(item.message || '').replace(/"/g, '""')}"`,
-        `"${item.status}"`,
-        `"${(item.raw_response || '').replace(/"/g, '""')}"`
-      ]);
-
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `sms_history_${new Date().toISOString().slice(0,10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast('CSV downloaded successfully');
     });
 
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `sms_history_${new Date().toISOString().slice(0,10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast('CSV downloaded successfully');
-    });
-
-    loadHistory();
+    loadHistory(1);
   </script>
 </body>
 </html>
+
