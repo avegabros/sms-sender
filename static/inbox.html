@@ -296,7 +296,9 @@
     <div class="card">
       <div class="table-header-controls">
         <input type="text" class="search-input" id="search-input" placeholder="Search by sender or message text...">
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="action-btn" id="delete-selected-btn" disabled style="color: #f87171;">🗑️ Delete Selected (0)</button>
+          <button class="action-btn" id="clear-all-btn" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #f87171;">⚠️ Clear All</button>
           <button class="action-btn" id="refresh-btn">🔄 Refresh</button>
         </div>
       </div>
@@ -305,6 +307,7 @@
         <table>
           <thead>
             <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-cb"></th>
               <th>Timestamp</th>
               <th>Sender Number</th>
               <th>Received Message Body</th>
@@ -314,13 +317,14 @@
           </thead>
           <tbody id="inbox-table-body">
             <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                 Loading received SMS inbox...
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+
 
       <!-- Pagination Bar -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--card-border); flex-wrap: wrap; gap: 0.75rem;">
@@ -356,6 +360,9 @@
     const inboxTableBody = document.getElementById('inbox-table-body');
     const searchInput = document.getElementById('search-input');
     const refreshBtn = document.getElementById('refresh-btn');
+    const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+    const clearAllBtn = document.getElementById('clear-all-btn');
+    const selectAllCb = document.getElementById('select-all-cb');
     const prevPageBtn = document.getElementById('prev-page-btn');
     const nextPageBtn = document.getElementById('next-page-btn');
     const pageInfoText = document.getElementById('page-info-text');
@@ -367,6 +374,8 @@
     const metricTotal = document.getElementById('metric-total');
     const metricUnread = document.getElementById('metric-unread');
 
+    let selectedIds = new Set();
+
     function getApiUrl(path) {
       return window.location.origin + path;
     }
@@ -377,8 +386,25 @@
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
+    function updateSelectionState() {
+      const count = selectedIds.size;
+      deleteSelectedBtn.textContent = `🗑️ Delete Selected (${count})`;
+      deleteSelectedBtn.disabled = count === 0;
+
+      const rowCbs = document.querySelectorAll('.msg-cb');
+      if (rowCbs.length > 0) {
+        const allChecked = Array.from(rowCbs).every(cb => cb.checked);
+        selectAllCb.checked = allChecked;
+      } else {
+        selectAllCb.checked = false;
+      }
+    }
+
     async function loadInbox(page = 1) {
       currentPage = page;
+      selectedIds.clear();
+      updateSelectionState();
+
       const apiKey = localStorage.getItem('sms_sender_api_key');
       const headers = {};
       if (apiKey) {
@@ -387,7 +413,7 @@
 
       inboxTableBody.innerHTML = `
         <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
             Loading received SMS inbox...
           </td>
         </tr>
@@ -425,7 +451,7 @@
       } catch (err) {
         inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="5" style="text-align: center; color: var(--error); padding: 2rem;">
+            <td colspan="6" style="text-align: center; color: var(--error); padding: 2rem;">
               Failed to load inbox (${err.message}). Make sure your API Key is saved in the Dashboard.
             </td>
           </tr>
@@ -437,7 +463,7 @@
       if (records.length === 0) {
         inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
               No received SMS messages found in inbox.
             </td>
           </tr>
@@ -451,6 +477,9 @@
         
         return `
           <tr>
+            <td style="text-align: center;">
+              <input type="checkbox" class="msg-cb" data-id="${item.id}">
+            </td>
             <td class="code-text" style="color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
             <td class="code-text" style="font-weight: 600; white-space: nowrap; color: var(--primary);">${escapeHtml(item.sender)}</td>
             <td style="max-width: 350px; word-break: break-word;">${escapeHtml(item.message)}</td>
@@ -466,6 +495,18 @@
         `;
       }).join('');
 
+      document.querySelectorAll('.msg-cb').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const id = e.target.dataset.id;
+          if (e.target.checked) {
+            selectedIds.add(id);
+          } else {
+            selectedIds.delete(id);
+          }
+          updateSelectionState();
+        });
+      });
+
       document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const id = e.target.dataset.id;
@@ -475,6 +516,74 @@
         });
       });
     }
+
+    selectAllCb.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      document.querySelectorAll('.msg-cb').forEach(cb => {
+        cb.checked = isChecked;
+        const id = cb.dataset.id;
+        if (isChecked) {
+          selectedIds.add(id);
+        } else {
+          selectedIds.delete(id);
+        }
+      });
+      updateSelectionState();
+    });
+
+    deleteSelectedBtn.addEventListener('click', async () => {
+      if (selectedIds.size === 0) return;
+      if (!confirm(`Are you sure you want to delete ${selectedIds.size} selected message(s)?`)) return;
+
+      const apiKey = localStorage.getItem('sms_sender_api_key');
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
+      try {
+        const response = await fetch(getApiUrl('/api/inbox/delete-bulk'), {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ ids: Array.from(selectedIds) })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          showToast(`Deleted ${data.deleted_count} message(s)`);
+          loadInbox(currentPage);
+        } else {
+          showToast(`Delete failed: ${data.detail || 'Error'}`);
+        }
+      } catch (err) {
+        showToast('Error executing bulk delete');
+      }
+    });
+
+    clearAllBtn.addEventListener('click', async () => {
+      if (!confirm('⚠️ Are you sure you want to clear ALL received SMS messages from the inbox? This cannot be undone!')) return;
+
+      const apiKey = localStorage.getItem('sms_sender_api_key');
+      const headers = {};
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
+      try {
+        const response = await fetch(getApiUrl('/api/inbox/clear'), {
+          method: 'POST',
+          headers: headers
+        });
+        const data = await response.json();
+        if (response.ok) {
+          showToast(`Cleared ${data.deleted_count} record(s) from inbox`);
+          loadInbox(1);
+        } else {
+          showToast(`Clear failed: ${data.detail || 'Error'}`);
+        }
+      } catch (err) {
+        showToast('Error clearing inbox');
+      }
+    });
 
     async function deleteMessage(id) {
       const apiKey = localStorage.getItem('sms_sender_api_key');
@@ -536,3 +645,4 @@
   </script>
 </body>
 </html>
+

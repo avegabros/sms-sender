@@ -182,6 +182,9 @@ graph LR
 | **`POST`** | `/send-sms` | `X-API-Key` | Transmits an SMS message to a phone number. |
 | **`GET`** | `/api/inbox` | `X-API-Key` / Basic Auth | Retrieves received SMS inbox messages with pagination. |
 | **`DELETE`** | `/api/inbox/{id}` | `X-API-Key` / Basic Auth | Deletes an inbox record by ID. |
+| **`POST`** | `/api/inbox/delete-bulk` | `X-API-Key` / Basic Auth | Mass deletes selected received SMS messages by ID list. |
+| **`POST`** | `/api/inbox/clear` | `X-API-Key` / Basic Auth | Clears all received SMS messages from database. |
+
 | **`GET`** | `/api/history` | `X-API-Key` / Basic Auth | Retrieves dispatch history metrics & paginated records. |
 | **`GET`** | `/health` | Public | Diagnostics check on serial port & SIM800L transceiver. |
 | **`POST`** | `/api/hardware/reset` | `X-API-Key` / Basic Auth | Triggers GPIO 17 hardware pulse & AT soft-reset. |

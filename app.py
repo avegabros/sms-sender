@@ -433,6 +433,40 @@ def delete_inbox_message(msg_id):
             logger.error(f"Error deleting inbox message: {e}")
             return False
 
+def delete_inbox_messages_bulk(msg_ids):
+    if not msg_ids:
+        return 0
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            placeholders = ",".join(["?"] * len(msg_ids))
+            cursor.execute(f"DELETE FROM inbox WHERE id IN ({placeholders})", msg_ids)
+            deleted_count = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error bulk deleting inbox messages: {e}")
+            return 0
+
+def clear_all_inbox_messages():
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM inbox")
+            deleted_count = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error clearing all inbox messages: {e}")
+            return 0
+
+
 def background_inbox_poller():
     logger.info("Background SIM800L Inbox Poller active")
     while True:
@@ -992,6 +1026,9 @@ def get_inbox_messages(
 ):
     return load_inbox_paginated(page=page, limit=limit, search=search)
 
+class BulkDeleteRequest(BaseModel):
+    ids: list[str]
+
 @app.delete(
     "/api/inbox/{msg_id}",
     tags=["SMS Operations"],
@@ -1002,6 +1039,27 @@ def delete_inbox_msg(msg_id: str, auth: str = Depends(verify_api_key_or_dashboar
     if delete_inbox_message(msg_id):
         return {"success": True, "message": f"Message {msg_id} deleted"}
     raise HTTPException(status_code=404, detail="Message not found")
+
+@app.post(
+    "/api/inbox/delete-bulk",
+    tags=["SMS Operations"],
+    summary="Mass delete selected received SMS from inbox",
+    description="Deletes a list of inbox records by ID."
+)
+def bulk_delete_inbox_msgs(payload: BulkDeleteRequest, auth: str = Depends(verify_api_key_or_dashboard)):
+    count = delete_inbox_messages_bulk(payload.ids)
+    return {"success": True, "deleted_count": count, "message": f"Successfully deleted {count} inbox record(s)"}
+
+@app.post(
+    "/api/inbox/clear",
+    tags=["SMS Operations"],
+    summary="Clear all received SMS from inbox",
+    description="Deletes all inbox records from database."
+)
+def clear_all_inbox_msgs(auth: str = Depends(verify_api_key_or_dashboard)):
+    count = clear_all_inbox_messages()
+    return {"success": True, "deleted_count": count, "message": f"Cleared all {count} inbox record(s)"}
+
 
 @app.get(
     "/history",
