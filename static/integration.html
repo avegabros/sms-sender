@@ -525,9 +525,169 @@
           <pre><code id="code-curl"></code></pre>
         </div>
       </div>
+    <!-- Incoming SMS & Reply Parsing Guide Card -->
+    <div class="card">
+      <div class="card-title">📥 Incoming SMS & Reply Integration Guide</div>
+      <div class="subtitle">Learn how to configure Webhooks and parse incoming SMS reply patterns such as <code>APPROVE 123</code>, <code>YES</code>, <code>YES 123</code>, and <code>VERIFY 4582</code>.</div>
+
+      <!-- Reply Formats Overview -->
+      <div style="background: #09090b; border: 1px solid var(--card-border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem;">
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--primary);">Popular SMS Reply Command Patterns</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+          <div style="background: #18181b; padding: 0.85rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <strong style="color: #34d399;">1. Action + Reference ID</strong><br>
+            Examples: <code>APPROVE 123</code>, <code>YES 4582</code>, <code>PAY 9921</code><br>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Contains both the action command and the target Order/Transaction ID.</span>
+          </div>
+          <div style="background: #18181b; padding: 0.85rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <strong style="color: #38bdf8;">2. Simple Keyword Reply</strong><br>
+            Examples: <code>YES</code>, <code>NO</code>, <code>STOP</code>, <code>HELP</code><br>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Correlated with the sender's phone number against recent pending database records.</span>
+          </div>
+          <div style="background: #18181b; padding: 0.85rem; border-radius: 6px; border: 1px solid var(--card-border);">
+            <strong style="color: #fbbf24;">3. Verification / OTP Code</strong><br>
+            Examples: <code>VERIFY 892140</code>, <code>892140</code><br>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Direct match against active 2FA or password reset tokens.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Webhook Payload Format -->
+      <div style="margin-bottom: 1.5rem;">
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text);">Webhook Payload Received from Gateway</h4>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">When <code>WEBHOOK_URL</code> is set, your server receives an HTTP POST request in this format:</p>
+        <pre><code style="font-family: var(--font-mono); font-size: 0.82rem; color: #34d399;">{
+  "event": "sms_received",
+  "id": "inbox_1723045800_a1b2",
+  "sender": "+639171234567",
+  "message": "APPROVE 123",
+  "timestamp": "2026-08-07T16:12:00+08:00"
+}</code></pre>
+      </div>
+
+      <!-- Webhook Code Examples -->
+      <div class="tabs-container">
+        <button class="tab-btn active" onclick="switchWebhookTab('node-wh')">Node.js / Express Webhook</button>
+        <button class="tab-btn" onclick="switchWebhookTab('php-wh')">PHP Webhook Handler</button>
+        <button class="tab-btn" onclick="switchWebhookTab('python-wh')">Python FastAPI Webhook</button>
+      </div>
+
+      <div class="tab-content active" id="tab-node-wh">
+        <div class="code-block-wrapper">
+          <div class="code-header">
+            <span>Node.js Express - Parsing Command & ID Replies ('APPROVE 123', 'YES 4582', 'YES')</span>
+            <button class="copy-btn" onclick="copyCode('code-node-wh-text')">Copy Code</button>
+          </div>
+          <pre><code id="code-node-wh-text">const express = require('express');
+const app = express();
+app.use(express.json());
+
+// Webhook endpoint to receive incoming SMS replies from sms-sender
+app.post('/webhook/sms-received', (req, res) => {
+  const { sender, message, timestamp } = req.body;
+  console.log(`Received SMS from ${sender}: "${message}"`);
+
+  const text = (message || '').trim().toUpperCase();
+
+  // Pattern 1: Match 'APPROVE 123', 'YES 4582', 'CONFIRM 991'
+  const matchWithId = text.match(/^(APPROVE|CONFIRM|YES|PAY)\s+(\d+)$/i);
+  if (matchWithId) {
+    const action = matchWithId[1]; // e.g. 'APPROVE' or 'YES'
+    const orderId = matchWithId[2]; // e.g. '123'
+    console.log(`Command: ${action} for Order #${orderId} from ${sender}`);
+    
+    // Execute business logic: approve transaction #123 in your database
+    // approveOrder(orderId, sender);
+  } 
+  // Pattern 2: Match simple 'YES' or 'NO' (correlated via sender phone number)
+  else if (text === 'YES' || text === 'NO') {
+    console.log(`Simple reply '${text}' from ${sender}`);
+    
+    // Look up latest pending transaction for phone number in your DB
+    // handleLatestPendingOrder(sender, text === 'YES');
+  } 
+  // Pattern 3: Fallback for unmatched replies
+  else {
+    console.log(`General message received: "${message}"`);
+  }
+
+  res.status(200).json({ status: 'success' });
+});
+
+app.listen(3000, () => console.log('Webhook server running on port 3000'));</code></pre>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-php-wh">
+        <div class="code-block-wrapper">
+          <div class="code-header">
+            <span>PHP (Vanilla / Laravel) - Parsing Replies ('APPROVE 123', 'YES')</span>
+            <button class="copy-btn" onclick="copyCode('code-php-wh-text')">Copy Code</button>
+          </div>
+          <pre><code id="code-php-wh-text">&lt;?php
+// webhook.php - Receive incoming SMS from sms-sender gateway
+$rawInput = file_get_contents('php://input');
+$data = json_decode($rawInput, true);
+
+$sender = $data['sender'] ?? '';
+$message = trim($data['message'] ?? '');
+$text = strtoupper($message);
+
+// Pattern 1: Match 'APPROVE 123', 'YES 4582'
+if (preg_match('/^(APPROVE|CONFIRM|YES|PAY)\s+(\d+)$/i', $text, $matches)) {
+    $action = $matches[1]; // 'APPROVE' or 'YES'
+    $orderId = $matches[2]; // '123'
+    
+    // Process approval for $orderId in your database
+    // approveOrderInDb($orderId, $sender);
+} 
+// Pattern 2: Match single word 'YES' or 'NO'
+else if ($text === 'YES' || $text === 'NO') {
+    // Process latest pending record for $sender phone number
+    // processPendingRecordByPhone($sender, $text === 'YES');
+}
+
+http_response_code(200);
+echo json_encode(['status' => 'success']);
+?&gt;</code></pre>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-python-wh">
+        <div class="code-block-wrapper">
+          <div class="code-header">
+            <span>Python (FastAPI) - Parsing Command & Reference ID</span>
+            <button class="copy-btn" onclick="copyCode('code-py-wh-text')">Copy Code</button>
+          </div>
+          <pre><code id="code-py-wh-text">from fastapi import FastAPI, Request
+import re
+
+app = FastAPI()
+
+@app.post("/webhook/sms-received")
+async def handle_incoming_sms(request: Request):
+    payload = await request.json()
+    sender = payload.get("sender")
+    message = (payload.get("message") or "").strip().upper()
+
+    # Match 'APPROVE 123', 'YES 4582', 'VERIFY 8921'
+    match = re.search(r'^(APPROVE|CONFIRM|YES|VERIFY)\s+(\d+)$', message)
+    if match:
+        action = match.group(1) # 'APPROVE' / 'YES'
+        target_id = match.group(2) # '123'
+        print(f"Action {action} for ID {target_id} from {sender}")
+        # update_db_transaction(target_id, action)
+    elif message in ("YES", "NO"):
+        print(f"Direct decision '{message}' from {sender}")
+        # update_latest_pending(sender, message == "YES")
+
+    return {"status": "success"}</code></pre>
+        </div>
+      </div>
     </div>
 
     <!-- Response Specs Card -->
+
     <div class="card">
       <div class="card-title">📡 Endpoint Specification</div>
       <div class="subtitle">API Endpoint: <span class="code-badge">POST /send-sms</span></div>
@@ -599,12 +759,21 @@
     }
 
     function switchTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      document.querySelectorAll('#tab-node, #tab-php, #tab-laravel, #tab-codeigniter, #tab-python, #tab-curl').forEach(content => content.classList.remove('active'));
+      event.target.parentElement.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       
       event.target.classList.add('active');
       document.getElementById(`tab-${tabId}`).classList.add('active');
     }
+
+    function switchWebhookTab(tabId) {
+      document.querySelectorAll('#tab-node-wh, #tab-php-wh, #tab-python-wh').forEach(content => content.classList.remove('active'));
+      event.target.parentElement.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      
+      event.target.classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+    }
+
 
     function showToast(msg) {
       toastMsg.textContent = msg;
