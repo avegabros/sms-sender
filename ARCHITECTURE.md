@@ -100,6 +100,10 @@ erDiagram
         TEXT api_key UK
         TEXT created_at
     }
+    settings {
+        TEXT key PK
+        TEXT value
+    }
 ```
 
 ---
@@ -113,6 +117,7 @@ sequenceDiagram
     autonumber
     actor Client
     participant API as FastAPI Gateway
+    participant Guard as Blacklist Guard
     participant Lock as Serial Lock
     participant DB as SQLite DB
     participant SIM as SIM800L Transceiver
@@ -120,20 +125,25 @@ sequenceDiagram
 
     Client->>API: POST /send-sms {phone_number, message} (X-API-Key)
     API->>API: Verify API Key & Resolve App Name
-    API->>Lock: Acquire serial_lock
-    API->>SIM: AT+CMGF=1 (Set Text Mode)
-    SIM-->>API: OK
-    API->>SIM: AT+CSCS="GSM" (Set Charset)
-    SIM-->>API: OK
-    API->>SIM: AT+CMGS="+639171234567"\r\n
-    SIM-->>API: > (Prompt)
-    API->>SIM: Message Body + Ctrl+Z (ASCII 26)
-    SIM->>Carrier: RF Transmission
-    Carrier-->>SIM: +CMGS: 42 OK
-    SIM-->>API: +CMGS: 42 OK
-    API->>Lock: Release serial_lock
-    API->>DB: INSERT INTO history (status='success')
-    API-->>Client: 200 OK {success: true, raw_response: "+CMGS: 42 OK"}
+    API->>Guard: Check is_number_blocked(phone_number)
+    alt Number is Blacklisted
+        Guard-->>Client: 400 Bad Request (Destination Blacklisted)
+    else Number is Clear
+        API->>Lock: Acquire serial_lock
+        API->>SIM: AT+CMGF=1 (Set Text Mode)
+        SIM-->>API: OK
+        API->>SIM: AT+CSCS="GSM" (Set Charset)
+        SIM-->>API: OK
+        API->>SIM: AT+CMGS="+639171234567"\r\n
+        SIM-->>API: > (Prompt)
+        API->>SIM: Message Body + Ctrl+Z (ASCII 26)
+        SIM->>Carrier: RF Transmission
+        Carrier-->>SIM: +CMGS: 42 OK
+        SIM-->>API: +CMGS: 42 OK
+        API->>Lock: Release serial_lock
+        API->>DB: INSERT INTO history (status='success')
+        API-->>Client: 200 OK {success: true, raw_response: "+CMGS: 42 OK"}
+    end
 ```
 
 ### 5.2 Inbound SMS & Webhook Dispatch Sequence
@@ -144,6 +154,7 @@ sequenceDiagram
     actor Sender as Remote Cellphone
     participant SIM as SIM800L Transceiver
     participant Poller as Inbox Poller Thread
+    participant Filter as Auto-Delete Spam Filter
     participant DB as SQLite DB
     participant Webhook as External Webhook Endpoint
 
@@ -152,14 +163,21 @@ sequenceDiagram
     Poller->>SIM: AT+CMGL="ALL"
     SIM-->>Poller: +CMGL: 1,"REC UNREAD","+639171234567","","..."
     Poller->>Poller: Parse Sender, Timestamp, Body
-    opt WEBHOOK_URL Configured
-        Poller->>Webhook: POST {event: "sms_received", sender, message, timestamp}
-        Webhook-->>Poller: 200 OK
+    Poller->>Filter: Check should_auto_delete_inbox(sender, message)
+    alt Matches Sender or Keyword Spam Rule
+        Filter-->>Poller: Drop Message (Auto-Delete Filter)
+        Note over Poller: Dropped & logged to stdout
+    else Message Clean
+        opt WEBHOOK_URL Configured
+            Poller->>Webhook: POST {event: "sms_received", sender, message} (X-Webhook-Secret)
+            Webhook-->>Poller: 200 OK
+        end
+        Poller->>DB: INSERT INTO inbox (status='delivered')
     end
-    Poller->>DB: INSERT INTO inbox (status='delivered')
     Poller->>SIM: AT+CMGD=1,4 (Purge Read SIM Memory)
     Note over SIM: SIM Memory cleared (0/20 capacity)
 ```
+
 
 ---
 

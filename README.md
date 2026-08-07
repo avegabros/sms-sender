@@ -105,13 +105,14 @@ The API service runs on port `8080`:
 * **Web Dashboard**: `http://[YOUR_PI_IP]:8080/`
   * Graphical interface for configuring API keys, testing SMS dispatch, resetting SIM800L hardware, and viewing real-time terminal logs.
 * **Received SMS Inbox**: `http://[YOUR_PI_IP]:8080/inbox`
-  * Real-time received SMS inbox viewer, unread metrics, search filtering, and deletion.
+  * Real-time received SMS inbox viewer, unread metrics, search filtering, mass selection, and bulk deletion.
 * **SMS History & Credit Tracker**: `http://[YOUR_PI_IP]:8080/history`
   * Displays dispatch history, credit usage metrics, fast SQL search/filtering, and CSV export.
 * **Multi-Language Integration Guide**: `http://[YOUR_PI_IP]:8080/integration`
-  * Interactive code customizers and pre-built code snippets for **Node.js**, **TypeScript**, **PHP (cURL & Guzzle)**, **Laravel**, **CodeIgniter 3 & 4**, **Python**, and **cURL CLI**.
+  * Interactive code customizers, reply command parsing patterns (`APPROVE 123`, `YES`), and code snippets for **Node.js**, **PHP**, **Laravel**, **CodeIgniter**, **Python**, and **cURL CLI**.
+* **Gateway Settings & Rules**: `http://[YOUR_PI_IP]:8080/settings`
+  * Master API Key management, Phone Number Blacklist, Auto-Delete Spam Rules, Webhook Secret, and Data Retention Policy.
 * **System Architecture Document**: For deep architectural details, see [ARCHITECTURE.md](file:///d:/code/sms-sender/ARCHITECTURE.md).
-
 
 ---
 
@@ -143,7 +144,7 @@ GET http://[YOUR_PI_IP]:8080/health
 ---
 
 ### 2. Send SMS
-Sends a text message to a specified recipient number using international format (e.g. `+639171234567`).
+Sends a text message to a specified recipient number using international format (e.g. `+639171234567`). Automatically validates destination against phone number blacklist settings.
 
 ```http
 POST http://[YOUR_PI_IP]:8080/send-sms
@@ -168,7 +169,37 @@ X-API-Key: your_client_or_master_api_key
 
 ---
 
-### 3. SMS History & Metrics
+### 3. Received Inbox & Inbox Management
+Fetch, bulk delete, or clear received SMS messages.
+
+* **Get Inbox Messages**: `GET /api/inbox?page=1&limit=50&search=keyword`
+* **Delete Inbox Message**: `DELETE /api/inbox/{msg_id}`
+* **Bulk Delete Messages**: `POST /api/inbox/delete-bulk` (`{"ids": ["inbox_1", "inbox_2"]}`)
+* **Clear All Inbox**: `POST /api/inbox/clear`
+
+---
+
+### 4. Gateway Settings & Filtering Rules
+Fetch or update gateway blacklist rules, auto-delete spam rules, webhook target, and retention policies.
+
+* **Get Settings**: `GET /api/settings`
+* **Update Settings**: `POST /api/settings`
+  ```json
+  {
+    "settings": {
+      "blocked_numbers": "+639000000000, 2256, 8080, GLOBE",
+      "auto_delete_senders": "GLOBE, SMART, TELCO_PROMO, 2256",
+      "auto_delete_keywords": "PROMO, LOAN, FREE, CONGRATS",
+      "webhook_url": "https://your-backend.abas.ph/api/sms-received",
+      "webhook_secret": "your_webhook_signature_secret",
+      "retention_days": "30"
+    }
+  }
+  ```
+
+---
+
+### 5. SMS History & Metrics
 Retrieves dispatch history logs and credit tracking summary counts.
 
 ```http
@@ -176,33 +207,12 @@ GET http://[YOUR_PI_IP]:8080/api/history
 X-API-Key: your_client_or_master_api_key
 ```
 
-#### Response (Success)
-```json
-{
-  "stats": {
-    "total": 45,
-    "success": 42,
-    "failed": 3
-  },
-  "history": [
-    {
-      "id": "sms_1721748500_a1b2",
-      "timestamp": "2026-07-23T15:30:00+08:00",
-      "phone_number": "+639171234567",
-      "message": "Sample message",
-      "status": "success",
-      "raw_response": "+CMGS: 42 OK",
-      "app_name": "trace-app"
-    }
-  ]
-}
-```
-
 ---
 
-### 4. Admin API Key Management
+### 6. Admin API Key Management
 Generate, list, and revoke application API keys. Requires the Master Admin Key (`SMS_SENDER_API_KEY`).
 
 * **List API Keys**: `GET /api/keys`
 * **Create Client Key**: `POST /api/keys` (`{"app_name": "trace-app"}`)
 * **Revoke Client Key**: `DELETE /api/keys/{app_name}`
+
