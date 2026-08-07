@@ -533,10 +533,15 @@
       }, 3000);
     }
 
+    // Helper to construct safe API URLs without embedded credentials
+    function getApiUrl(path) {
+      return window.location.origin + path;
+    }
+
     // Health check checker
     async function checkHealth() {
       try {
-        const response = await fetch('/health');
+        const response = await fetch(getApiUrl('/health'));
         const data = await response.json();
         
         if (response.ok && data.status === 'healthy') {
@@ -566,7 +571,7 @@
       }
 
       try {
-        const response = await fetch('/api/keys', {
+        const response = await fetch(getApiUrl('/api/keys'), {
           headers: { 'X-API-Key': key }
         });
 
@@ -637,7 +642,7 @@
     async function revokeKey(app) {
       const key = localStorage.getItem('sms_sender_api_key');
       try {
-        const response = await fetch(`/api/keys/${encodeURIComponent(app)}`, {
+        const response = await fetch(getApiUrl(`/api/keys/${encodeURIComponent(app)}`), {
           method: 'DELETE',
           headers: { 'X-API-Key': key }
         });
@@ -662,7 +667,7 @@
 
       const key = localStorage.getItem('sms_sender_api_key');
       try {
-        const response = await fetch('/api/keys', {
+        const response = await fetch(getApiUrl('/api/keys'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -709,7 +714,7 @@
           headers['X-API-Key'] = key;
         }
 
-        const response = await fetch('/send-sms', {
+        const response = await fetch(getApiUrl('/send-sms'), {
           method: 'POST',
           headers: headers,
           body: JSON.stringify({
@@ -756,7 +761,7 @@
             headers['X-API-Key'] = key;
           }
 
-          const response = await fetch('/api/hardware/reset', {
+          const response = await fetch(getApiUrl('/api/hardware/reset'), {
             method: 'POST',
             headers: headers
           });
@@ -779,6 +784,7 @@
         }
       });
     }
+
 
     // Run health checks and load keys on init
     checkHealth();

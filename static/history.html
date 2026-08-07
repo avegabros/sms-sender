@@ -435,6 +435,11 @@
     const metricTotal = document.getElementById('metric-total');
     const metricFailed = document.getElementById('metric-failed');
 
+    // Helper to construct safe API URLs without embedded credentials
+    function getApiUrl(path) {
+      return window.location.origin + path;
+    }
+
     function showToast(msg) {
       toastMsg.textContent = msg;
       toast.classList.add('show');
@@ -466,7 +471,8 @@
           queryParams.append('search', currentSearch);
         }
 
-        const response = await fetch(`/api/history?${queryParams.toString()}`, { headers });
+        const response = await fetch(getApiUrl(`/api/history?${queryParams.toString()}`), { headers });
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -590,7 +596,7 @@
           queryParams.append('search', currentSearch);
         }
 
-        const response = await fetch(`/api/history?${queryParams.toString()}`, { headers });
+        const response = await fetch(getApiUrl(`/api/history?${queryParams.toString()}`), { headers });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
