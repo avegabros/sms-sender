@@ -16,9 +16,13 @@ services:
       - SMS_SENDER_API_KEY=${SMS_SENDER_API_KEY:-}
       - DASHBOARD_USERNAME=${DASHBOARD_USERNAME:-}
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
+      - RESET_GPIO_PIN=${RESET_GPIO_PIN:-17}
     volumes:
       - ./data:/app/data
+      # Map sysfs GPIO interface for hardware pin resets (if wired)
+      - /sys/class/gpio:/sys/class/gpio
     restart: always
+
 
 
 

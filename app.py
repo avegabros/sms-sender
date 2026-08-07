@@ -79,56 +79,178 @@ def verify_dashboard_auth(credentials: HTTPBasicCredentials = Depends(security_b
             )
     return credentials
 
-KEYS_FILE = "data/api_keys.json"
-HISTORY_FILE = "data/sms_history.json"
+import sqlite3
+import datetime
+
+DB_FILE = "data/sms_sender.db"
+db_lock = threading.Lock()
+RESET_GPIO_PIN = int(os.getenv("RESET_GPIO_PIN", "17"))
+
+def init_db():
+    if not os.path.exists("data"):
+        os.makedirs("data", exist_ok=True)
+    with db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                phone_number TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL,
+                raw_response TEXT,
+                app_name TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                app_name TEXT PRIMARY KEY,
+                api_key TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp DESC)")
+        conn.commit()
+
+        # Migrate legacy json files if present
+        KEYS_FILE = "data/api_keys.json"
+        HISTORY_FILE = "data/sms_history.json"
+        
+        if os.path.exists(KEYS_FILE):
+            try:
+                with open(KEYS_FILE, "r") as f:
+                    legacy_keys = json.load(f)
+                    if isinstance(legacy_keys, dict):
+                        now_str = datetime.datetime.now().isoformat()
+                        for app_n, k_val in legacy_keys.items():
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO api_keys (app_name, api_key, created_at) VALUES (?, ?, ?)",
+                                (app_n, k_val, now_str)
+                            )
+                conn.commit()
+                os.rename(KEYS_FILE, f"{KEYS_FILE}.migrated")
+                logger.info("Successfully migrated legacy api_keys.json to SQLite database")
+            except Exception as e:
+                logger.error(f"Error migrating legacy api_keys.json: {e}")
+
+        if os.path.exists(HISTORY_FILE):
+            try:
+                with open(HISTORY_FILE, "r") as f:
+                    legacy_history = json.load(f)
+                    if isinstance(legacy_history, list):
+                        for rec in legacy_history:
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO history (id, timestamp, phone_number, message, status, raw_response, app_name)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    rec.get("id"),
+                                    rec.get("timestamp"),
+                                    rec.get("phone_number"),
+                                    rec.get("message"),
+                                    rec.get("status"),
+                                    rec.get("raw_response"),
+                                    rec.get("app_name", "Dashboard")
+                                )
+                            )
+                conn.commit()
+                os.rename(HISTORY_FILE, f"{HISTORY_FILE}.migrated")
+                logger.info("Successfully migrated legacy sms_history.json to SQLite database")
+            except Exception as e:
+                logger.error(f"Error migrating legacy sms_history.json: {e}")
+
+        conn.close()
+
+# Initialize DB on module startup
+init_db()
 
 def load_history():
-    if not os.path.exists("data"):
-        os.makedirs("data")
-    if not os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "w") as f:
-            json.dump([], f)
-        return []
-    try:
-        with open(HISTORY_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error reading history file: {e}")
-        return []
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, timestamp, phone_number, message, status, raw_response, app_name FROM history ORDER BY timestamp DESC LIMIT 10000")
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error reading history from SQLite DB: {e}")
+            return []
 
 def add_history_record(record):
-    history = load_history()
-    history.insert(0, record)
-    if len(history) > 10000:
-        history = history[:10000]
-    try:
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        logger.error(f"Error saving history record: {e}")
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO history (id, timestamp, phone_number, message, status, raw_response, app_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.get("id"),
+                    record.get("timestamp"),
+                    record.get("phone_number"),
+                    record.get("message"),
+                    record.get("status"),
+                    record.get("raw_response"),
+                    record.get("app_name", "Dashboard")
+                )
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error saving history record to SQLite DB: {e}")
 
 def load_keys():
-    if not os.path.exists("data"):
-        os.makedirs("data")
-    if not os.path.exists(KEYS_FILE):
-        with open(KEYS_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-    try:
-        with open(KEYS_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error reading keys file: {e}")
-        return {}
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT app_name, api_key FROM api_keys")
+            rows = cursor.fetchall()
+            conn.close()
+            return {app_name: api_key for app_name, api_key in rows}
+        except Exception as e:
+            logger.error(f"Error reading API keys from SQLite DB: {e}")
+            return {}
 
-def save_keys(keys_data):
-    if not os.path.exists("data"):
-        os.makedirs("data")
-    try:
-        with open(KEYS_FILE, "w") as f:
-            json.dump(keys_data, f, indent=2)
-    except Exception as e:
-        logger.error(f"Error saving keys file: {e}")
+def save_key(app_name, api_key):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO api_keys (app_name, api_key, created_at) VALUES (?, ?, ?)",
+                (app_name, api_key, datetime.datetime.now().isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error saving API key to SQLite DB: {e}")
+
+def delete_key(app_name):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM api_keys WHERE app_name = ?", (app_name,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error deleting API key from SQLite DB: {e}")
+
 
 def resolve_app_name(request: Request, api_key: str = None) -> str:
     source_header = request.headers.get("X-Request-Source")
@@ -366,8 +488,7 @@ def create_api_key(payload: KeyCreateRequest, admin_key: str = Depends(verify_ad
     if app_name in keys_data:
         raise HTTPException(status_code=400, detail="Key already exists for this application")
     new_key = secrets.token_hex(16)
-    keys_data[app_name] = new_key
-    save_keys(keys_data)
+    save_key(app_name, new_key)
     return {"app_name": app_name, "key": new_key}
 
 @app.delete(
@@ -381,9 +502,76 @@ def delete_api_key(app_name: str, admin_key: str = Depends(verify_admin_key)):
     keys_data = load_keys()
     if app_name not in keys_data:
         raise HTTPException(status_code=404, detail="Key not found for this application")
-    del keys_data[app_name]
-    save_keys(keys_data)
+    delete_key(app_name)
     return {"success": True, "message": f"Key for {app_name} revoked successfully"}
+
+def trigger_gpio_reset(pin=RESET_GPIO_PIN):
+    logger.info(f"Attempting hardware GPIO pulse on Pin {pin}...")
+    # 1. Try RPi.GPIO or gpiod
+    try:
+        import RPi.GPIO as GPIO
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(pin, GPIO.OUT)
+        # Active LOW reset pulse for SIM800L RST pin
+        GPIO.output(pin, GPIO.LOW)
+        time.sleep(0.2)
+        GPIO.output(pin, GPIO.HIGH)
+        time.sleep(0.1)
+        GPIO.cleanup(pin)
+        logger.info(f"Hardware reset pulse sent via RPi.GPIO (GPIO {pin})")
+        return True, f"Hardware GPIO reset executed on GPIO {pin}"
+    except Exception as e1:
+        logger.debug(f"RPi.GPIO reset unavailable: {e1}")
+
+    # 2. Try sysfs GPIO fallback
+    try:
+        gpio_dir = f"/sys/class/gpio/gpio{pin}"
+        if not os.path.exists(gpio_dir):
+            with open("/sys/class/gpio/export", "w") as f:
+                f.write(str(pin))
+        with open(f"{gpio_dir}/direction", "w") as f:
+            f.write("out")
+        with open(f"{gpio_dir}/value", "w") as f:
+            f.write("0")
+        time.sleep(0.2)
+        with open(f"{gpio_dir}/value", "w") as f:
+            f.write("1")
+        logger.info(f"Hardware reset pulse sent via sysfs (GPIO {pin})")
+        return True, f"Hardware GPIO reset executed on GPIO {pin} (sysfs)"
+    except Exception as e2:
+        logger.debug(f"sysfs GPIO reset unavailable: {e2}")
+
+    return False, f"GPIO pin {pin} unmapped or inaccessible inside container"
+
+def trigger_at_reset():
+    with serial_lock:
+        try:
+            ser = get_serial_device(timeout=5)
+            send_at_command(ser, "AT+CFUN=1,1", timeout=5)
+            time.sleep(2)
+            ser.close()
+            logger.info("Software AT reset command (AT+CFUN=1,1) issued to SIM800L")
+            return True, "Software AT reset executed (AT+CFUN=1,1)"
+        except Exception as e:
+            logger.error(f"AT software reset failed: {e}")
+            return False, f"AT soft reset error: {str(e)}"
+
+def reset_sim800_module():
+    gpio_ok, gpio_msg = trigger_gpio_reset()
+    time.sleep(0.5)
+    at_ok, at_msg = trigger_at_reset()
+
+    if gpio_ok or at_ok:
+        details = []
+        if gpio_ok:
+            details.append(gpio_msg)
+        if at_ok:
+            details.append(at_msg)
+        return {"success": True, "method": "success", "message": " | ".join(details)}
+    else:
+        return {"success": False, "method": "failed", "message": f"Reset failed: {gpio_msg}; {at_msg}"}
+
 
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
@@ -495,6 +683,19 @@ def health_check():
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}
+
+@app.post(
+    "/api/hardware/reset",
+    tags=["System"],
+    summary="Reset SIM800L module",
+    description="Triggers a hardware reset pulse on GPIO 17 (RST pin) and an AT software reset (AT+CFUN=1,1) to reboot the SIM800L module."
+)
+def reset_hardware_module(auth: str = Depends(verify_api_key_or_dashboard)):
+    result = reset_sim800_module()
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result["message"])
+    return result
+
 
 @app.get(
     "/history",

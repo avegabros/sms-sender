@@ -38,13 +38,14 @@ The SIM800L EVB board includes an onboard 5V-to-4V regulator and transistor leve
 
 #### Pin Connections Table (Option B)
 
-| Raspberry Pi 5 Pin | SIM800L EVB Pin | Function / Details |
+| **Raspberry Pi 5 Pin** | **SIM800L EVB Pin** | Function / Details |
 | :--- | :--- | :--- |
 | **Pin 2 or Pin 4 (5V)** | **`5V`** | 5V Power Input |
 | **Pin 6 (GND)** | **`GND`** | Power & Signal Ground |
 | **Pin 1 (3.3V)** | **`VDD`** | **Level Shifter Reference** (CRITICAL to prevent floating logic resets) |
 | **Pin 8 (GPIO 14 / TXD)** | **`RXD`** | Serial Data (Pi TX -> EVB RX) |
 | **Pin 10 (GPIO 15 / RXD)** | **`TXD`** | Serial Data (Pi RX <- EVB TX) |
+| **Pin 11 (GPIO 17)** | **`RST`** | **Hardware Reset Pin** (Active LOW 200ms pulse for module reboot) |
 
 > [!TIP]
 > **Power Spike Protection (1000µF Capacitor)**:

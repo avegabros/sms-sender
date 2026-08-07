@@ -276,15 +276,17 @@
 
   <header>
     <h1><span class="logo-highlight">SMS</span> Sender</h1>
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
       <a href="/history" style="color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; background: #27272a; border: 1px solid var(--card-border); transition: all 0.2s ease;">📜 SMS History</a>
       <a href="/integration" style="color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; background: #27272a; border: 1px solid var(--card-border); transition: all 0.2s ease;">📖 Integration Guide</a>
+      <button id="reset-sim800-btn" style="color: #f87171; background: #27272a; border: 1px solid #450a0a; cursor: pointer; font-size: 0.85rem; font-weight: 500; padding: 0.35rem 0.75rem; border-radius: 9999px; display: inline-flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;">🔄 Reset SIM800L</button>
       <div class="badge" id="status-badge">
         <div class="badge-dot" id="status-dot"></div>
         <span id="status-text">Checking Status...</span>
       </div>
     </div>
   </header>
+
 
   <main>
     <!-- Config Card -->
@@ -667,10 +669,53 @@
       }
     });
 
+    // SIM800L Reset handler
+    const resetSim800Btn = document.getElementById('reset-sim800-btn');
+    if (resetSim800Btn) {
+      resetSim800Btn.addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to trigger a SIM800L module reset?')) {
+          return;
+        }
+        resetSim800Btn.disabled = true;
+        showToast('Initiating SIM800L reset...', 'info');
+        logToConsole('Triggering SIM800L hardware GPIO pulse and AT soft-reset...', 'info');
+
+        try {
+          const headers = { 'X-Request-Source': 'Dashboard' };
+          const key = localStorage.getItem('sms_sender_api_key');
+          if (key) {
+            headers['X-API-Key'] = key;
+          }
+
+          const response = await fetch('/api/hardware/reset', {
+            method: 'POST',
+            headers: headers
+          });
+
+          const data = await response.json();
+          if (response.ok) {
+            showToast('SIM800L Reset Executed', 'success');
+            logToConsole(`SUCCESS: ${data.message}`, 'success');
+            setTimeout(checkHealth, 3000);
+          } else {
+            const errMsg = data.detail || JSON.stringify(data);
+            showToast('Reset Failed', 'error');
+            logToConsole(`ERROR (${response.status}): ${errMsg}`, 'error');
+          }
+        } catch (err) {
+          showToast('Error communicating with reset endpoint', 'error');
+          logToConsole(`CRITICAL: Reset request failed. ${err.message}`, 'error');
+        } finally {
+          resetSim800Btn.disabled = false;
+        }
+      });
+    }
+
     // Run health checks and load keys on init
     checkHealth();
     refreshKeys();
     setInterval(checkHealth, 10000);
   </script>
+
 </body>
 </html>
