@@ -18,13 +18,7 @@ services:
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
     volumes:
       - ./data:/app/data
-    networks:
-      - default
-      - nginx-proxy-manager_default
     restart: always
 
-networks:
-  nginx-proxy-manager_default:
-    external: true
 
 
