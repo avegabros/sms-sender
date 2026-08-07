@@ -133,8 +133,11 @@ def init_db():
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_inbox_timestamp ON inbox(timestamp DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inbox_read_status ON inbox(read_status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inbox_sender ON inbox(sender)")
 
         # Seed default gateway settings if missing
+
         default_settings = {
             "webhook_url": os.getenv("WEBHOOK_URL", ""),
             "webhook_secret": "",
@@ -431,6 +434,23 @@ def dispatch_webhook(payload):
     return ", ".join(statuses)
 
 
+def dispatch_webhook_async(msg_id, payload):
+    def _worker():
+        status = dispatch_webhook(payload)
+        init_db()
+        with db_lock:
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE inbox SET webhook_status = ? WHERE id = ?", (status, msg_id))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error updating webhook status for {msg_id}: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def save_inbox_message(msg):
     should_filter, reason = should_auto_delete_inbox(msg["sender"], msg["message"])
     if should_filter:
@@ -442,30 +462,41 @@ def save_inbox_message(msg):
         try:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
+            
+            # Prevent duplicate message entry
+            cursor.execute(
+                "SELECT COUNT(*) FROM inbox WHERE sender = ? AND timestamp = ? AND message = ?",
+                (msg["sender"], msg["timestamp"], msg["message"])
+            )
+            if cursor.fetchone()[0] > 0:
+                conn.close()
+                return
+
             msg_id = f"inbox_{int(time.time())}_{secrets.token_hex(4)}"
-            webhook_status = dispatch_webhook({
+            cursor.execute(
+                """
+                INSERT INTO inbox (id, timestamp, sender, message, read_status, webhook_status)
+                VALUES (?, ?, ?, ?, 0, 'pending')
+                """,
+                (
+                    msg_id,
+                    msg["timestamp"],
+                    msg["sender"],
+                    msg["message"]
+                )
+            )
+            conn.commit()
+            conn.close()
+            logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database")
+            
+            # Asynchronously dispatch webhook outside db_lock and serial_lock
+            dispatch_webhook_async(msg_id, {
                 "event": "sms_received",
                 "id": msg_id,
                 "sender": msg["sender"],
                 "message": msg["message"],
                 "timestamp": msg["timestamp"]
             })
-            cursor.execute(
-                """
-                INSERT INTO inbox (id, timestamp, sender, message, read_status, webhook_status)
-                VALUES (?, ?, ?, ?, 0, ?)
-                """,
-                (
-                    msg_id,
-                    msg["timestamp"],
-                    msg["sender"],
-                    msg["message"],
-                    webhook_status
-                )
-            )
-            conn.commit()
-            conn.close()
-            logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database")
         except Exception as e:
             logger.error(f"Error saving incoming SMS to inbox: {e}")
 
@@ -482,7 +513,7 @@ def poll_inbox_messages():
                     logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
                     for msg in parsed_messages:
                         save_inbox_message(msg)
-                    # Delete read messages from SIM card memory to keep SIM memory clean
+                    # Thoroughly purge SIM card memory to prevent SIM memory full state
                     send_at_command(ser, "AT+CMGD=1,4", timeout=3)
             ser.close()
         except Exception as e:
@@ -506,7 +537,7 @@ def load_inbox_paginated(page=1, limit=50, search=None):
             cursor.execute(f"SELECT COUNT(*) FROM inbox {where_clause}", params)
             total_records = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM inbox WHERE read_status = 0")
+            cursor.execute("SELECT COALESCE(SUM(CASE WHEN read_status = 0 THEN 1 ELSE 0 END), 0) FROM inbox")
             unread_records = cursor.fetchone()[0]
 
             offset = (page - 1) * limit
@@ -532,6 +563,7 @@ def load_inbox_paginated(page=1, limit=50, search=None):
         except Exception as e:
             logger.error(f"Error reading inbox from DB: {e}")
             return {"stats": {"total": 0, "unread": 0}, "records": [], "pagination": {"page": page, "limit": limit, "total_records": 0, "total_pages": 1}}
+
 
 def delete_inbox_message(msg_id):
     init_db()
