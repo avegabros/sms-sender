@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMS Sender Gateway - Gateway Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --card: #18181b;
+      --card-border: #27272a;
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --radius: 12px;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      width: 100%;
+      max-width: 1000px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    h1 span.logo-highlight {
+      color: var(--primary);
+    }
+
+    .nav-tabs-container {
+      width: 100%;
+      max-width: 1000px;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      padding: 4px;
+      border-radius: 10px;
+      gap: 4px;
+      width: 100%;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .tab-item {
+      flex: 1;
+      text-align: center;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 7px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+
+    .tab-item:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-item.active {
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    main {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: -0.5rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .help-text {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    input[type="text"], input[type="password"], select, textarea {
+      background: #09090b;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0.65rem 0.85rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      width: 100%;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .btn {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: #27272a;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: #3f3f46;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--success);
+      color: var(--text);
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100;
+      font-size: 0.875rem;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <h1><span class="logo-highlight">Gateway</span> Settings & Rules</h1>
+    </div>
+  </header>
+
+  <nav class="nav-tabs-container">
+    <div class="nav-tabs">
+      <a href="/" class="tab-item">🎛️ Dashboard</a>
+      <a href="/inbox" class="tab-item">📥 Received Inbox</a>
+      <a href="/history" class="tab-item">📜 Dispatch History</a>
+      <a href="/integration" class="tab-item">📖 Integration Guide</a>
+      <a href="/settings" class="tab-item active">⚙️ Settings</a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- Master Authentication Settings -->
+    <div class="card">
+      <div class="card-title">🔑 Master Authorization Key (X-API-Key)</div>
+      <div class="subtitle">Set your Master Admin API Key. This key is used by your browser to manage application API keys and execute gateway administrative commands.</div>
+      
+      <div class="form-group">
+        <label for="master-api-key-input">Master Admin API Key</label>
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="password" id="master-api-key-input" placeholder="Enter your master admin key...">
+          <button class="btn btn-secondary" id="toggle-key-visibility-btn" style="white-space: nowrap;">👁️ Show</button>
+          <button class="btn" id="save-local-key-btn" style="white-space: nowrap;">💾 Save to Local</button>
+        </div>
+        <div class="help-text">Saved in browser <code>localStorage</code> under <code>sms_sender_api_key</code>.</div>
+      </div>
+    </div>
+
+    <!-- Blacklist & Phone Number Blocking -->
+    <div class="card">
+      <div class="card-title">🚫 Phone Number Blacklist & Spam Blocking</div>
+      <div class="subtitle">Prevent sending SMS to or receiving SMS from specified phone numbers or shortcodes.</div>
+      
+      <div class="form-group">
+        <label for="blocked-numbers-input">Blacklisted Numbers / Shortcodes (Comma-separated)</label>
+        <textarea id="blocked-numbers-input" placeholder="e.g. +639000000000, 2256, 8080, GLOBE"></textarea>
+        <div class="help-text">Outbound SMS dispatch to these numbers will be rejected. Inbound messages from these senders will be ignored.</div>
+      </div>
+    </div>
+
+    <!-- Auto-Delete Rules & Inbox Filters -->
+    <div class="card">
+      <div class="card-title">🤖 Auto-Delete Rules (Rule-Based Inbox Filtering)</div>
+      <div class="subtitle">Automatically drop unwanted incoming messages before they are stored in the inbox database.</div>
+      
+      <div class="form-group">
+        <label for="auto-delete-senders-input">Auto-Delete Senders (Comma-separated)</label>
+        <input type="text" id="auto-delete-senders-input" placeholder="e.g. GLOBE, SMART, TELCO_PROMO, 2256, 8080">
+        <div class="help-text">Incoming SMS from any of these senders will be dropped automatically.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="auto-delete-keywords-input">Auto-Delete Keywords (Comma-separated)</label>
+        <input type="text" id="auto-delete-keywords-input" placeholder="e.g. PROMO, LOAN, FREE, CONGRATS, CASINO">
+        <div class="help-text">Incoming SMS containing any of these keywords (case-insensitive) will be dropped.</div>
+      </div>
+    </div>
+
+    <!-- Webhook & Data Retention Settings -->
+    <div class="card">
+      <div class="card-title">⚡ Webhook & Data Retention Policy</div>
+      <div class="subtitle">Configure real-time webhook endpoints and automated database cleanup.</div>
+      
+      <div class="form-group">
+        <label for="webhook-url-input">Target Webhook URL (HTTP POST)</label>
+        <input type="text" id="webhook-url-input" placeholder="e.g. https://your-backend.abas.ph/api/sms-received">
+        <div class="help-text">Real-time destination for incoming SMS payloads.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="webhook-secret-input">Webhook Signature Secret (X-Webhook-Secret)</label>
+        <input type="password" id="webhook-secret-input" placeholder="Optional secret key sent in X-Webhook-Secret header">
+        <div class="help-text">Optional header secret to verify webhook authenticity on your server.</div>
+      </div>
+
+      <div class="form-group">
+        <label for="retention-days-select">Database Record Retention Cleanup</label>
+        <select id="retention-days-select">
+          <option value="7">Delete records older than 7 Days</option>
+          <option value="30" selected>Delete records older than 30 Days (Recommended)</option>
+          <option value="90">Delete records older than 90 Days</option>
+          <option value="0">Never auto-delete records</option>
+        </select>
+        <div class="help-text">Automatically purges dispatch history and inbox logs older than the selected retention period.</div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
+        <button class="btn" id="save-all-settings-btn" style="padding: 0.75rem 2rem; font-size: 1rem;">
+          💾 Save All Gateway Settings
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast">
+    <span id="toast-msg">Settings saved successfully</span>
+  </div>
+
+  <script>
+    const masterApiKeyInput = document.getElementById('master-api-key-input');
+    const toggleKeyVisibilityBtn = document.getElementById('toggle-key-visibility-btn');
+    const saveLocalKeyBtn = document.getElementById('save-local-key-btn');
+
+    const blockedNumbersInput = document.getElementById('blocked-numbers-input');
+    const autoDeleteSendersInput = document.getElementById('auto-delete-senders-input');
+    const autoDeleteKeywordsInput = document.getElementById('auto-delete-keywords-input');
+    const webhookUrlInput = document.getElementById('webhook-url-input');
+    const webhookSecretInput = document.getElementById('webhook-secret-input');
+    const retentionDaysSelect = document.getElementById('retention-days-select');
+    const saveAllSettingsBtn = document.getElementById('save-all-settings-btn');
+
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-msg');
+
+    function getApiUrl(path) {
+      return window.location.origin + path;
+    }
+
+    function showToast(msg) {
+      toastMsg.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    // Load master key from localStorage
+    const savedLocalKey = localStorage.getItem('sms_sender_api_key');
+    if (savedLocalKey) {
+      masterApiKeyInput.value = savedLocalKey;
+    }
+
+    toggleKeyVisibilityBtn.addEventListener('click', () => {
+      if (masterApiKeyInput.type === 'password') {
+        masterApiKeyInput.type = 'text';
+        toggleKeyVisibilityBtn.textContent = '🙈 Hide';
+      } else {
+        masterApiKeyInput.type = 'password';
+        toggleKeyVisibilityBtn.textContent = '👁️ Show';
+      }
+    });
+
+    saveLocalKeyBtn.addEventListener('click', () => {
+      const val = masterApiKeyInput.value.trim();
+      if (val) {
+        localStorage.setItem('sms_sender_api_key', val);
+        showToast('Saved Master API Key to browser local storage');
+      } else {
+        localStorage.removeItem('sms_sender_api_key');
+        showToast('Cleared Master API Key from local storage');
+      }
+    });
+
+    // Load Gateway Settings from API
+    async function loadSettings() {
+      const apiKey = localStorage.getItem('sms_sender_api_key');
+      const headers = {};
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
+      try {
+        const response = await fetch(getApiUrl('/api/settings'), { headers });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+
+        blockedNumbersInput.value = data.blocked_numbers || '';
+        autoDeleteSendersInput.value = data.auto_delete_senders || '';
+        autoDeleteKeywordsInput.value = data.auto_delete_keywords || '';
+        webhookUrlInput.value = data.webhook_url || '';
+        webhookSecretInput.value = data.webhook_secret || '';
+        if (data.retention_days) {
+          retentionDaysSelect.value = data.retention_days;
+        }
+      } catch (err) {
+        showToast(`Failed to load gateway settings: ${err.message}`);
+      }
+    }
+
+    // Save All Gateway Settings via API
+    saveAllSettingsBtn.addEventListener('click', async () => {
+      saveAllSettingsBtn.disabled = true;
+      saveAllSettingsBtn.textContent = '⏳ Saving...';
+
+      const apiKey = localStorage.getItem('sms_sender_api_key');
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
+      const payload = {
+        settings: {
+          blocked_numbers: blockedNumbersInput.value.trim(),
+          auto_delete_senders: autoDeleteSendersInput.value.trim(),
+          auto_delete_keywords: autoDeleteKeywordsInput.value.trim(),
+          webhook_url: webhookUrlInput.value.trim(),
+          webhook_secret: webhookSecretInput.value.trim(),
+          retention_days: retentionDaysSelect.value
+        }
+      };
+
+      try {
+        const response = await fetch(getApiUrl('/api/settings'), {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          showToast('Gateway settings saved successfully!');
+        } else {
+          const errData = await response.json();
+          showToast(`Error saving settings: ${errData.detail || 'Failed'}`);
+        }
+      } catch (err) {
+        showToast(`Connection error saving settings`);
+      } finally {
+        saveAllSettingsBtn.disabled = false;
+        saveAllSettingsBtn.textContent = '💾 Save All Gateway Settings';
+      }
+    });
+
+    loadSettings();
+  </script>
+</body>
+</html>

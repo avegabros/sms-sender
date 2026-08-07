@@ -124,9 +124,30 @@ def init_db():
             )
         """)
 
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_inbox_timestamp ON inbox(timestamp DESC)")
+
+        # Seed default gateway settings if missing
+        default_settings = {
+            "webhook_url": os.getenv("WEBHOOK_URL", ""),
+            "webhook_secret": "",
+            "blocked_numbers": "",
+            "auto_delete_senders": "GLOBE,SMART,TELCO_PROMO,2256,8080",
+            "auto_delete_keywords": "PROMO,LOAN,FREE,CONGRATS",
+            "retention_days": "30"
+        }
+        for k_name, v_val in default_settings.items():
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k_name, v_val))
+
         conn.commit()
+
 
 
         # Migrate legacy json files if present
@@ -301,19 +322,96 @@ def parse_cmgl_response(raw_text):
 
     return messages
 
+def get_all_settings():
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM settings")
+            rows = cursor.fetchall()
+            conn.close()
+            return {row["key"]: row["value"] for row in rows}
+        except Exception as e:
+            logger.error(f"Error reading settings from DB: {e}")
+            return {}
+
+def get_setting(key_name, default=""):
+    settings = get_all_settings()
+    return settings.get(key_name, default)
+
+def update_settings_bulk(settings_dict):
+    init_db()
+    with db_lock:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            for k, v in settings_dict.items():
+                cursor.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (str(k), str(v))
+                )
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Error updating settings in DB: {e}")
+            return False
+
+def is_number_blocked(phone_number):
+    if not phone_number:
+        return False
+    blocked_str = get_setting("blocked_numbers", "")
+    if not blocked_str:
+        return False
+    
+    clean_phone = phone_number.replace("+", "").replace("-", "").replace(" ", "").lower()
+    blocked_items = [b.strip().replace("+", "").replace("-", "").replace(" ", "").lower() for b in blocked_str.split(",") if b.strip()]
+    
+    for item in blocked_items:
+        if item and item in clean_phone:
+            return True
+    return False
+
+def should_auto_delete_inbox(sender, message):
+    senders_str = get_setting("auto_delete_senders", "")
+    if senders_str:
+        sender_clean = sender.replace("+", "").replace("-", "").replace(" ", "").lower()
+        blocked_senders = [s.strip().replace("+", "").replace("-", "").replace(" ", "").lower() for s in senders_str.split(",") if s.strip()]
+        for s in blocked_senders:
+            if s and s in sender_clean:
+                return True, f"Matched auto-delete sender filter '{s}'"
+
+    keywords_str = get_setting("auto_delete_keywords", "")
+    if keywords_str and message:
+        msg_clean = message.lower()
+        keywords = [k.strip().lower() for k in keywords_str.split(",") if k.strip()]
+        for kw in keywords:
+            if kw and kw in msg_clean:
+                return True, f"Matched auto-delete keyword filter '{kw}'"
+
+    return False, ""
+
 def dispatch_webhook(payload):
-    webhook_url = os.getenv("WEBHOOK_URL")
+    webhook_url = get_setting("webhook_url", os.getenv("WEBHOOK_URL", ""))
+    webhook_secret = get_setting("webhook_secret", "")
+    
     if not webhook_url or not webhook_url.strip():
         return "none"
     try:
+        req_headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "sms-sender-gateway/1.0"
+        }
+        if webhook_secret and webhook_secret.strip():
+            req_headers["X-Webhook-Secret"] = webhook_secret.strip()
+
         req_data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             webhook_url.strip(),
             data=req_data,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "sms-sender-gateway/1.0"
-            },
+            headers=req_headers,
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -324,6 +422,11 @@ def dispatch_webhook(payload):
         return f"failed: {str(e)}"
 
 def save_inbox_message(msg):
+    should_filter, reason = should_auto_delete_inbox(msg["sender"], msg["message"])
+    if should_filter:
+        logger.info(f"[SPAM FILTER] Dropped/auto-deleted incoming SMS from '{msg['sender']}': {reason}")
+        return
+
     init_db()
     with db_lock:
         try:
@@ -355,6 +458,7 @@ def save_inbox_message(msg):
             logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database")
         except Exception as e:
             logger.error(f"Error saving incoming SMS to inbox: {e}")
+
 
 def poll_inbox_messages():
     with serial_lock:
@@ -1050,6 +1154,76 @@ def bulk_delete_inbox_msgs(payload: BulkDeleteRequest, auth: str = Depends(verif
     count = delete_inbox_messages_bulk(payload.ids)
     return {"success": True, "deleted_count": count, "message": f"Successfully deleted {count} inbox record(s)"}
 
+class SettingsUpdateRequest(BaseModel):
+    settings: dict[str, str]
+
+def run_retention_cleanup():
+    retention_str = get_setting("retention_days", "30")
+    try:
+        days = int(retention_str)
+        if days <= 0:
+            return
+        init_db()
+        with db_lock:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+            cursor.execute("DELETE FROM history WHERE timestamp < ?", (cutoff_date,))
+            del_hist = cursor.rowcount
+            cursor.execute("DELETE FROM inbox WHERE timestamp < ?", (cutoff_date,))
+            del_inb = cursor.rowcount
+            conn.commit()
+            conn.close()
+            if del_hist > 0 or del_inb > 0:
+                logger.info(f"[RETENTION CLEANUP] Deleted {del_hist} history & {del_inb} inbox records older than {days} days")
+    except Exception as e:
+        logger.error(f"Error during retention cleanup: {e}")
+
+def background_retention_scheduler():
+    logger.info("Background Retention Cleanup Scheduler active")
+    while True:
+        try:
+            time.sleep(86400)
+            run_retention_cleanup()
+        except Exception as e:
+            logger.error(f"Background retention scheduler error: {e}")
+
+retention_thread = threading.Thread(target=background_retention_scheduler, daemon=True)
+retention_thread.start()
+
+@app.get(
+    "/settings",
+    response_class=HTMLResponse,
+    include_in_schema=False
+)
+def get_settings_page(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)):
+    try:
+        with open("static/settings.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"<h3>Error loading settings page: {str(e)}</h3>", status_code=500)
+
+@app.get(
+    "/api/settings",
+    response_model=dict,
+    tags=["System"],
+    summary="Get Gateway Settings",
+    description="Retrieves current gateway settings, blacklist rules, auto-delete filters, and webhook configurations."
+)
+def get_gateway_settings(auth: str = Depends(verify_api_key_or_dashboard)):
+    return get_all_settings()
+
+@app.post(
+    "/api/settings",
+    tags=["System"],
+    summary="Update Gateway Settings",
+    description="Updates gateway configuration settings in database."
+)
+def update_gateway_settings(payload: SettingsUpdateRequest, auth: str = Depends(verify_api_key_or_dashboard)):
+    if update_settings_bulk(payload.settings):
+        return {"success": True, "message": "Settings updated successfully", "settings": get_all_settings()}
+    raise HTTPException(status_code=500, detail="Failed to update settings in database")
+
 @app.post(
     "/api/inbox/clear",
     tags=["SMS Operations"],
@@ -1059,6 +1233,7 @@ def bulk_delete_inbox_msgs(payload: BulkDeleteRequest, auth: str = Depends(verif
 def clear_all_inbox_msgs(auth: str = Depends(verify_api_key_or_dashboard)):
     count = clear_all_inbox_messages()
     return {"success": True, "deleted_count": count, "message": f"Cleared all {count} inbox record(s)"}
+
 
 
 @app.get(
@@ -1106,7 +1281,15 @@ def get_sms_history(
 )
 def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verify_api_key)):
     import datetime
+
+    if is_number_blocked(payload.phone_number):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Destination phone number '{payload.phone_number}' is blacklisted in gateway settings."
+        )
+
     app_name = resolve_app_name(request, api_key)
+
     with serial_lock:
         logger.info(f"Received request from [{app_name}] to send SMS to {payload.phone_number}")
         try:

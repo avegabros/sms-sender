@@ -185,12 +185,15 @@ graph LR
 | **`POST`** | `/api/inbox/delete-bulk` | `X-API-Key` / Basic Auth | Mass deletes selected received SMS messages by ID list. |
 | **`POST`** | `/api/inbox/clear` | `X-API-Key` / Basic Auth | Clears all received SMS messages from database. |
 
+| **`GET`** | `/api/settings` | `X-API-Key` / Basic Auth | Retrieves current gateway settings, blacklist rules, and filters. |
+| **`POST`** | `/api/settings` | `X-API-Key` / Basic Auth | Updates gateway settings, blacklist rules, and webhook configuration. |
 | **`GET`** | `/api/history` | `X-API-Key` / Basic Auth | Retrieves dispatch history metrics & paginated records. |
 | **`GET`** | `/health` | Public | Diagnostics check on serial port & SIM800L transceiver. |
 | **`POST`** | `/api/hardware/reset` | `X-API-Key` / Basic Auth | Triggers GPIO 17 hardware pulse & AT soft-reset. |
 | **`GET`** | `/api/keys` | Master Admin Key | Lists all registered application API keys. |
 | **`POST`** | `/api/keys` | Master Admin Key | Generates a new application API key. |
 | **`DELETE`** | `/api/keys/{name}` | Master Admin Key | Revokes an application API key. |
+
 
 ---
 
