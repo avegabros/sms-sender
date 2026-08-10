@@ -1239,7 +1239,8 @@ def debug_inbox_poll(auth: str = Depends(verify_api_key_or_dashboard)):
             trace["at"] = send_at_command(ser, "AT", timeout=2)
             trace["cpin"] = query_at_command(ser, "AT+CPIN?", timeout=2)
             trace["creg"] = query_at_command(ser, "AT+CREG?", timeout=2)
-            trace["csq"] = query_at_command(ser, "AT+CSQ", timeout=2)
+            trace["csca"] = query_at_command(ser, "AT+CSCA?", timeout=2)
+            trace["csmp"] = query_at_command(ser, "AT+CSMP?", timeout=2)
             trace["cmgf"] = send_at_command(ser, "AT+CMGF=1", timeout=2)
             trace["cpms"] = query_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
             trace["cnmi"] = send_at_command(ser, 'AT+CNMI=2,1,0,0,0', timeout=2)
@@ -1523,8 +1524,9 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 })
                 raise HTTPException(status_code=502, detail=detail_msg)
                 
-            # Set character set to GSM
+            # Set character set to GSM & SMS Text Parameters (Validity 1 day, Standard DCS)
             send_at_command(ser, 'AT+CSCS="GSM"')
+            send_at_command(ser, 'AT+CSMP=17,168,0,0')
                 
             # Send recipient number
             ser.reset_input_buffer()
