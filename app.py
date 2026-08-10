@@ -1566,56 +1566,34 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 })
                 raise HTTPException(status_code=502, detail=detail_msg)
                 
-            # Set character set to IRA (ASCII standard for phone numbers & text)
-            send_at_command(ser, 'AT+CSCS="IRA"')
-            
-            # Ensure SMS Service Center Address (SMSC) is set (Globe default: +639170000130)
-            csca = query_at_command(ser, "AT+CSCA?", timeout=2)
-            if not csca or '"+63' not in csca:
-                logger.info("Initializing SMSC Service Center to Globe default (+639170000130)...")
-                send_at_command(ser, 'AT+CSCA="+639170000130"', timeout=2)
+            # Select Text Mode & GSM character set
+            send_at_command(ser, "AT+CMGF=1", timeout=2)
+            send_at_command(ser, 'AT+CSCS="GSM"', timeout=2)
                 
             # Send recipient number
             ser.reset_input_buffer()
             ser.write(f'AT+CMGS="{payload.phone_number}"\r\n'.encode())
-            
-            # Wait up to 3s for > prompt
-            prompt_found = False
-            start_p = time.time()
-            while time.time() - start_p < 3:
-                p_line = ser.readline().decode(errors="ignore")
-                if ">" in p_line:
-                    prompt_found = True
-                    break
+            time.sleep(0.5)
             
             # Write SMS body and terminate with Ctrl+Z (ASCII 26)
             ser.write((payload.message + chr(26)).encode())
             logger.info("Transmitting message payload over GSM network...")
             
-            # Wait up to 15 seconds for carrier response line-by-line
-            response_lines = []
+            # Non-blocking poll for carrier response line
+            response = ""
             start_t = time.time()
-            ser.timeout = 1.0
-            
-            while time.time() - start_t < 15:
-                raw_l = ser.readline()
-                if raw_l:
-                    l = raw_l.decode(errors="ignore").strip()
-                    if l:
-                        response_lines.append(l)
-                        logger.info(f"CMGS Transmit Response Line: {l}")
-                        if "+CMGS:" in l or "OK" in l or "ERROR" in l or "Call Ready" in l:
-                            # Read any trailing OK line
-                            time.sleep(0.3)
-                            extra = ser.read_all().decode(errors="ignore").strip()
-                            if extra:
-                                response_lines.append(extra)
-                            break
+            while time.time() - start_t < 10:
+                time.sleep(0.5)
+                buf = ser.read_all().decode(errors="ignore")
+                if buf:
+                    response += buf
+                    logger.info(f"CMGS Transmit Chunk: {repr(buf)}")
+                    if "+CMGS:" in response or "ERROR" in response or "+CME ERROR:" in response or "+CMS ERROR:" in response:
+                        break
 
-            response = "\n".join(response_lines)
             logger.info(f"Full Carrier Response: {response.strip()}")
             
-            if "+CMGS:" in response or ("OK" in response and prompt_found):
+            if "+CMGS:" in response:
                 add_history_record({
                     "id": f"sms_{int(time.time())}_{secrets.token_hex(4)}",
                     "timestamp": datetime.datetime.now().isoformat(),
