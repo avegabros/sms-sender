@@ -281,46 +281,53 @@ def parse_cmgl_response(raw_text):
     if not raw_text or "+CMGL:" not in raw_text:
         return messages
 
-    pattern = re.compile(r'\+CMGL:\s*(\d+),\s*"([^"]+)",\s*"([^"]+)",\s*"(?:[^"]*)",\s*"([^"]+)"')
+    # Flexible CMGL regex matching index, status, sender, and timestamp across various SIM800L firmware formats
+    header_pattern = re.compile(r'\+CMGL:\s*(\d+),\s*"([^"]+)",\s*"([^"]+)"')
     lines = raw_text.splitlines()
     
     i = 0
     while i < len(lines):
         line = lines[i].strip()
-        match = pattern.search(line)
-        if match:
-            idx = int(match.group(1))
-            status_str = match.group(2)
-            sender = match.group(3)
-            time_str = match.group(4)
-            
-            body_lines = []
-            i += 1
-            while i < len(lines):
-                next_line = lines[i]
-                if next_line.startswith("+CMGL:") or next_line.strip() in ("OK", "ERROR"):
-                    i -= 1
-                    break
-                body_lines.append(next_line)
+        if line.startswith("+CMGL:"):
+            match = header_pattern.search(line)
+            if match:
+                idx = int(match.group(1))
+                status_str = match.group(2)
+                sender = match.group(3)
+                
+                # Extract timestamp (last quoted string in CMGL line)
+                quoted_strings = re.findall(r'"([^"]*)"', line)
+                time_str = quoted_strings[-1] if len(quoted_strings) >= 3 else ""
+                
+                body_lines = []
                 i += 1
+                while i < len(lines):
+                    next_line = lines[i]
+                    if next_line.startswith("+CMGL:") or next_line.strip() in ("OK", "ERROR"):
+                        i -= 1
+                        break
+                    body_lines.append(next_line)
+                    i += 1
+                    
+                body = "\n".join(body_lines).strip()
                 
-            body = "\n".join(body_lines).strip()
-            
-            try:
-                ts_parts = time_str.split(",")
-                date_p = ts_parts[0].split("/")
-                time_p = ts_parts[1].split("+")[0].split("-")[0]
-                iso_ts = f"20{date_p[0]}-{date_p[1]}-{date_p[2]}T{time_p}"
-            except Exception:
                 iso_ts = datetime.datetime.now().isoformat()
-                
-            messages.append({
-                "index": idx,
-                "status_str": status_str,
-                "sender": sender,
-                "timestamp": iso_ts,
-                "message": body
-            })
+                if time_str and "," in time_str:
+                    try:
+                        ts_parts = time_str.split(",")
+                        date_p = ts_parts[0].split("/")
+                        time_p = ts_parts[1].split("+")[0].split("-")[0]
+                        iso_ts = f"20{date_p[0]}-{date_p[1]}-{date_p[2]}T{time_p}"
+                    except Exception:
+                        pass
+                    
+                messages.append({
+                    "index": idx,
+                    "status_str": status_str,
+                    "sender": sender,
+                    "timestamp": iso_ts,
+                    "message": body
+                })
         i += 1
 
     return messages
@@ -511,6 +518,7 @@ def poll_inbox_messages():
         try:
             ser = get_serial_device(timeout=3, fast_init=True)
             send_at_command(ser, "AT+CMGF=1", timeout=2)
+            send_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
             raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=4)
             if raw_res and "+CMGL:" in raw_res:
                 parsed_messages = parse_cmgl_response(raw_res)
