@@ -1272,6 +1272,49 @@ def debug_inbox_poll(auth: str = Depends(verify_api_key_or_dashboard)):
         serial_lock.release()
 
 @app.get(
+    "/api/debug/ussd",
+    tags=["System"],
+    summary="Execute USSD code (e.g. check load balance)",
+    description="Sends a USSD command (e.g. *143# or *123#) to check carrier load balance or active promos."
+)
+def debug_ussd_code(code: str = "*143#", auth: str = Depends(verify_api_key_or_dashboard)):
+    acquired = serial_lock.acquire(timeout=10.0)
+    if not acquired:
+        return {"success": False, "error": "Serial lock busy"}
+    try:
+        ser = None
+        try:
+            ser = get_serial_device(timeout=5)
+            send_at_command(ser, "AT+CUSD=1", timeout=2)
+            cmd = f'AT+CUSD=1,"{code}",15'
+            raw_res = query_at_command(ser, cmd, timeout=10)
+            
+            # Read any incoming +CUSD response line
+            lines = []
+            if raw_res:
+                lines.append(raw_res)
+            time.sleep(2)
+            extra = ser.read_all().decode(errors="ignore").strip()
+            if extra:
+                lines.append(extra)
+                
+            return {
+                "success": True,
+                "code": code,
+                "raw_response": "\n".join(lines)
+            }
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        serial_lock.release()
+
+@app.get(
     "/inbox",
     response_class=HTMLResponse,
     include_in_schema=False
