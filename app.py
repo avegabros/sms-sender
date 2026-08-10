@@ -504,13 +504,23 @@ def save_inbox_message(msg):
             sender_clean = msg["sender"].strip()
             sender_digits = "".join(c for c in sender_clean if c.isdigit())[-10:]
             if sender_digits:
+                # 1. Search for recent dispatch from a specific registered App API Key first
                 cursor.execute(
-                    "SELECT app_name FROM history WHERE phone_number LIKE ? AND app_name IS NOT NULL AND app_name != 'Dashboard' ORDER BY timestamp DESC LIMIT 1",
+                    "SELECT app_name FROM history WHERE phone_number LIKE ? AND app_name IS NOT NULL AND app_name NOT IN ('Dashboard', 'Master Admin Key', 'Anonymous') ORDER BY timestamp DESC LIMIT 1",
                     (f"%{sender_digits}",)
                 )
                 match = cursor.fetchone()
                 if match and match[0] and match[0].strip():
                     target_app = match[0].strip()
+                else:
+                    # 2. Fallback to general history dispatch
+                    cursor.execute(
+                        "SELECT app_name FROM history WHERE phone_number LIKE ? AND app_name IS NOT NULL ORDER BY timestamp DESC LIMIT 1",
+                        (f"%{sender_digits}",)
+                    )
+                    fallback_match = cursor.fetchone()
+                    if fallback_match and fallback_match[0] and fallback_match[0].strip():
+                        target_app = fallback_match[0].strip()
 
             msg_id = f"inbox_{int(time.time())}_{secrets.token_hex(4)}"
             cursor.execute(
@@ -757,17 +767,20 @@ def delete_key(app_name):
 
 
 def resolve_app_name(request: Request, api_key: str = None) -> str:
-    source_header = request.headers.get("X-Request-Source")
-    if source_header and source_header.lower() == "dashboard":
-        return "Dashboard"
+    # 1. Check if provided API key matches a registered client application key
     if api_key:
-        if SMS_SENDER_API_KEY and api_key == SMS_SENDER_API_KEY:
-            return "Master Admin Key"
         keys_data = load_keys()
         for app, key in keys_data.items():
             if key == api_key:
                 return app
-        return "Master Admin Key"
+        if SMS_SENDER_API_KEY and api_key == SMS_SENDER_API_KEY:
+            return "Master Admin Key"
+
+    # 2. Check X-Request-Source header
+    source_header = request.headers.get("X-Request-Source")
+    if source_header and source_header.lower() == "dashboard":
+        return "Dashboard"
+
     return "Dashboard" if not SMS_SENDER_API_KEY else "Anonymous"
 
 def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
