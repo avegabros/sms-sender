@@ -276,6 +276,17 @@ import re
 import urllib.request
 import urllib.error
 
+def decode_ucs2_text(text):
+    if not text:
+        return text
+    clean_text = text.replace("\n", "").replace("\r", "").strip()
+    if len(clean_text) >= 4 and len(clean_text) % 4 == 0 and all(c in "0123456789ABCDEFabcdef" for c in clean_text):
+        try:
+            return bytes.fromhex(clean_text).decode("utf-16-be")
+        except Exception:
+            pass
+    return text
+
 def parse_cmgl_response(raw_text):
     messages = []
     if not raw_text or "+CMGL:" not in raw_text:
@@ -310,6 +321,7 @@ def parse_cmgl_response(raw_text):
                     i += 1
                     
                 body = "\n".join(body_lines).strip()
+                body = decode_ucs2_text(body)
                 
                 iso_ts = datetime.datetime.now().isoformat()
                 if time_str and "," in time_str:
@@ -516,12 +528,11 @@ def poll_inbox_messages():
     try:
         ser = None
         try:
-            ser = get_serial_device(timeout=3, fast_init=True)
+            ser = get_serial_device(timeout=4, fast_init=True)
             send_at_command(ser, "AT+CMGF=1", timeout=2)
             send_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
-            # Force SIM800L to save incoming SMS to SIM memory ("SM") and notify instead of streaming directly
             send_at_command(ser, 'AT+CNMI=2,1,0,0,0', timeout=2)
-            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=4)
+            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=8)
             if raw_res and "+CMGL:" in raw_res:
                 logger.info(f"[INBOX POLL] Discovered SMS raw response: {repr(raw_res)}")
                 parsed_messages = parse_cmgl_response(raw_res)
@@ -529,8 +540,8 @@ def poll_inbox_messages():
                     logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
                     for msg in parsed_messages:
                         save_inbox_message(msg)
-                    # Purge SIM card memory to prevent SIM memory full state
-                    send_at_command(ser, "AT+CMGD=1,4", timeout=3)
+            # Always purge SIM card memory so SIM card capacity remains 0/40 and never blocks incoming carrier SMS
+            send_at_command(ser, "AT+CMGD=1,4", timeout=4)
         finally:
             if ser and ser.is_open:
                 try:
