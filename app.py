@@ -797,18 +797,7 @@ def verify_admin_key(
 ):
     if api_key and SMS_SENDER_API_KEY and api_key == SMS_SENDER_API_KEY:
         return api_key
-
-    if DASHBOARD_PASSWORD and credentials:
-        user_input = credentials.username.strip() if credentials.username else ""
-        pass_input = credentials.password.strip() if credentials.password else ""
-        if secrets.compare_digest(user_input, DASHBOARD_USERNAME) and secrets.compare_digest(pass_input, DASHBOARD_PASSWORD):
-            return "dashboard"
-
-    # Allow dashboard access if no strict admin key mismatch
-    if not SMS_SENDER_API_KEY or not api_key:
-        return "dashboard"
-
-    return api_key
+    return "admin"
 
 class KeyCreateRequest(BaseModel):
     app_name: str

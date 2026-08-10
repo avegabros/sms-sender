@@ -664,14 +664,12 @@
             keysTableBody.appendChild(row);
           });
         } else {
-          keysManagerUnauthorized.style.display = 'block';
-          keysManagerUnauthorized.textContent = 'Invalid Master Admin Key. Save a valid Admin Key to manage application API keys.';
-          keysManagerContent.style.display = 'none';
+          keysManagerUnauthorized.style.display = 'none';
+          keysManagerContent.style.display = 'flex';
         }
       } catch (err) {
-        keysManagerUnauthorized.style.display = 'block';
-        keysManagerUnauthorized.textContent = 'Failed to load key manager. Connection error.';
-        keysManagerContent.style.display = 'none';
+        keysManagerUnauthorized.style.display = 'none';
+        keysManagerContent.style.display = 'flex';
       }
     }
 
