@@ -519,8 +519,11 @@ def poll_inbox_messages():
             ser = get_serial_device(timeout=3, fast_init=True)
             send_at_command(ser, "AT+CMGF=1", timeout=2)
             send_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
+            # Force SIM800L to save incoming SMS to SIM memory ("SM") and notify instead of streaming directly
+            send_at_command(ser, 'AT+CNMI=2,1,0,0,0', timeout=2)
             raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=4)
             if raw_res and "+CMGL:" in raw_res:
+                logger.info(f"[INBOX POLL] Discovered SMS raw response: {repr(raw_res)}")
                 parsed_messages = parse_cmgl_response(raw_res)
                 if parsed_messages:
                     logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
