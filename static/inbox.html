@@ -313,13 +313,14 @@
               <th>Timestamp</th>
               <th>Sender Number</th>
               <th>Received Message Body</th>
+              <th>Forwarded App API</th>
               <th>Webhook Status</th>
               <th style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="inbox-table-body">
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                 Loading received SMS inbox...
               </td>
             </tr>
@@ -415,7 +416,7 @@
 
       inboxTableBody.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
             Loading received SMS inbox...
           </td>
         </tr>
@@ -453,7 +454,7 @@
       } catch (err) {
         inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; color: var(--error); padding: 2rem;">
+            <td colspan="7" style="text-align: center; color: var(--error); padding: 2rem;">
               Failed to load inbox (${err.message}). Make sure your API Key is saved in the Dashboard.
             </td>
           </tr>
@@ -465,7 +466,7 @@
       if (records.length === 0) {
         inboxTableBody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
               No received SMS messages found in inbox.
             </td>
           </tr>
@@ -476,6 +477,7 @@
       inboxTableBody.innerHTML = records.map(item => {
         const formattedTime = new Date(item.timestamp).toLocaleString();
         const hookStatus = item.webhook_status || 'none';
+        const targetApp = item.target_app || 'Broadcast';
         
         return `
           <tr>
@@ -484,7 +486,12 @@
             </td>
             <td class="code-text" style="color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
             <td class="code-text" style="font-weight: 600; white-space: nowrap; color: var(--primary);">${escapeHtml(item.sender)}</td>
-            <td style="max-width: 350px; word-break: break-word;">${escapeHtml(item.message)}</td>
+            <td style="max-width: 320px; word-break: break-word;">${escapeHtml(item.message)}</td>
+            <td>
+              <span class="badge-app" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;">
+                📱 ${escapeHtml(targetApp)}
+              </span>
+            </td>
             <td>
               <span class="badge-webhook ${hookStatus}">
                 ${escapeHtml(hookStatus)}

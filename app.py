@@ -122,9 +122,15 @@ def init_db():
                 sender TEXT NOT NULL,
                 message TEXT NOT NULL,
                 read_status INTEGER DEFAULT 0,
-                webhook_status TEXT DEFAULT 'none'
+                webhook_status TEXT DEFAULT 'none',
+                target_app TEXT DEFAULT 'Broadcast'
             )
         """)
+
+        cursor.execute("PRAGMA table_info(inbox)")
+        inbox_cols = [col[1] for col in cursor.fetchall()]
+        if "target_app" not in inbox_cols:
+            cursor.execute("ALTER TABLE inbox ADD COLUMN target_app TEXT DEFAULT 'Broadcast'")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -493,22 +499,36 @@ def save_inbox_message(msg):
                 conn.close()
                 return
 
+            # Resolve target app by querying recent history for matching sender phone number
+            target_app = "Broadcast"
+            sender_clean = msg["sender"].strip()
+            sender_digits = "".join(c for c in sender_clean if c.isdigit())[-10:]
+            if sender_digits:
+                cursor.execute(
+                    "SELECT app_name FROM history WHERE phone_number LIKE ? AND app_name IS NOT NULL AND app_name != 'Dashboard' ORDER BY timestamp DESC LIMIT 1",
+                    (f"%{sender_digits}",)
+                )
+                match = cursor.fetchone()
+                if match and match[0] and match[0].strip():
+                    target_app = match[0].strip()
+
             msg_id = f"inbox_{int(time.time())}_{secrets.token_hex(4)}"
             cursor.execute(
                 """
-                INSERT INTO inbox (id, timestamp, sender, message, read_status, webhook_status)
-                VALUES (?, ?, ?, ?, 0, 'pending')
+                INSERT INTO inbox (id, timestamp, sender, message, read_status, webhook_status, target_app)
+                VALUES (?, ?, ?, ?, 0, 'pending', ?)
                 """,
                 (
                     msg_id,
                     msg["timestamp"],
                     msg["sender"],
-                    msg["message"]
+                    msg["message"],
+                    target_app
                 )
             )
             conn.commit()
             conn.close()
-            logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database")
+            logger.info(f"Saved incoming SMS from {msg['sender']} to SQLite inbox database (Target App: {target_app})")
             
             # Asynchronously dispatch webhook outside db_lock and serial_lock
             dispatch_webhook_async(msg_id, {
@@ -516,6 +536,7 @@ def save_inbox_message(msg):
                 "id": msg_id,
                 "sender": msg["sender"],
                 "message": msg["message"],
+                "target_app": target_app,
                 "timestamp": msg["timestamp"]
             })
         except Exception as e:
@@ -565,9 +586,9 @@ def load_inbox_paginated(page=1, limit=50, search=None):
             where_clause = ""
             params = []
             if search and search.strip():
-                where_clause = "WHERE sender LIKE ? OR message LIKE ?"
                 pattern = f"%{search.strip()}%"
-                params = [pattern, pattern]
+                where_clause = "WHERE sender LIKE ? OR message LIKE ? OR target_app LIKE ?"
+                params = [pattern, pattern, pattern]
                 
             cursor.execute(f"SELECT COUNT(*) FROM inbox {where_clause}", params)
             total_records = cursor.fetchone()[0]
@@ -577,7 +598,7 @@ def load_inbox_paginated(page=1, limit=50, search=None):
 
             offset = (page - 1) * limit
             cursor.execute(
-                f"SELECT id, timestamp, sender, message, read_status, webhook_status FROM inbox {where_clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                f"SELECT id, timestamp, sender, message, read_status, webhook_status, COALESCE(target_app, 'Broadcast') as target_app FROM inbox {where_clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
                 params + [limit, offset]
             )
             rows = cursor.fetchall()
