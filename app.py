@@ -1211,6 +1211,56 @@ def reset_hardware_module(auth: str = Depends(verify_api_key_or_dashboard)):
 
 
 @app.get(
+    "/api/debug/inbox-poll",
+    tags=["System"],
+    summary="Debug SMS inbox polling",
+    description="Performs an immediate manual poll of the SIM800L SMS inbox and returns complete raw AT command traces for diagnostics."
+)
+def debug_inbox_poll(auth: str = Depends(verify_api_key_or_dashboard)):
+    acquired = serial_lock.acquire(timeout=5.0)
+    if not acquired:
+        return {"success": False, "error": "Serial lock busy. Retry in a few seconds."}
+    try:
+        ser = None
+        trace = {}
+        try:
+            ser = get_serial_device(timeout=3, fast_init=True)
+            trace["at"] = send_at_command(ser, "AT", timeout=2)
+            trace["cpin"] = query_at_command(ser, "AT+CPIN?", timeout=2)
+            trace["creg"] = query_at_command(ser, "AT+CREG?", timeout=2)
+            trace["csq"] = query_at_command(ser, "AT+CSQ", timeout=2)
+            trace["cmgf"] = send_at_command(ser, "AT+CMGF=1", timeout=2)
+            trace["cpms"] = query_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
+            trace["cnmi"] = send_at_command(ser, 'AT+CNMI=2,1,0,0,0', timeout=2)
+            
+            raw_cmgl = query_at_command(ser, 'AT+CMGL="ALL"', timeout=5)
+            trace["cmgl_raw"] = raw_cmgl
+            
+            parsed = parse_cmgl_response(raw_cmgl) if raw_cmgl else []
+            trace["parsed_messages_count"] = len(parsed)
+            trace["parsed_messages"] = parsed
+            
+            # Also test PDU mode CMGL just in case
+            send_at_command(ser, "AT+CMGF=0", timeout=2)
+            trace["cmgl_pdu_mode_raw"] = query_at_command(ser, 'AT+CMGL=4', timeout=5)
+            
+            return {
+                "success": True,
+                "timestamp": datetime.datetime.now().isoformat(),
+                "trace": trace
+            }
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        serial_lock.release()
+
+@app.get(
     "/inbox",
     response_class=HTMLResponse,
     include_in_schema=False
