@@ -502,22 +502,34 @@ def save_inbox_message(msg):
 
 
 def poll_inbox_messages():
-    with serial_lock:
+    # Non-blocking lock acquire so poller never blocks HTTP requests or freezes Uvicorn threadpool
+    if not serial_lock.acquire(blocking=False):
+        logger.debug("Inbox poll cycle skipped: serial line in use by API")
+        return
+    try:
+        ser = None
         try:
-            ser = get_serial_device(timeout=5)
-            send_at_command(ser, "AT+CMGF=1", timeout=3)
-            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=5)
+            ser = get_serial_device(timeout=3, fast_init=True)
+            send_at_command(ser, "AT+CMGF=1", timeout=2)
+            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=4)
             if raw_res and "+CMGL:" in raw_res:
                 parsed_messages = parse_cmgl_response(raw_res)
                 if parsed_messages:
                     logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
                     for msg in parsed_messages:
                         save_inbox_message(msg)
-                    # Thoroughly purge SIM card memory to prevent SIM memory full state
+                    # Purge SIM card memory to prevent SIM memory full state
                     send_at_command(ser, "AT+CMGD=1,4", timeout=3)
-            ser.close()
-        except Exception as e:
-            logger.debug(f"Inbox poll cycle: {e}")
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.debug(f"Inbox poll cycle error: {e}")
+    finally:
+        serial_lock.release()
 
 def load_inbox_paginated(page=1, limit=50, search=None):
     init_db()
@@ -758,14 +770,26 @@ def verify_api_key_or_dashboard(
         detail="Invalid or missing API Key or Dashboard Auth"
     )
 
-def verify_admin_key(api_key: str = Security(API_KEY_HEADER)):
-    if SMS_SENDER_API_KEY:
-        if api_key != SMS_SENDER_API_KEY:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Master Admin API Key is required for this operation"
-            )
-    return api_key
+def verify_admin_key(
+    api_key: str = Security(API_KEY_HEADER),
+    credentials: HTTPBasicCredentials = Depends(security_basic)
+):
+    if api_key and SMS_SENDER_API_KEY and api_key == SMS_SENDER_API_KEY:
+        return api_key
+
+    if DASHBOARD_PASSWORD and credentials:
+        user_input = credentials.username.strip() if credentials.username else ""
+        pass_input = credentials.password.strip() if credentials.password else ""
+        if secrets.compare_digest(user_input, DASHBOARD_USERNAME) and secrets.compare_digest(pass_input, DASHBOARD_PASSWORD):
+            return "dashboard"
+
+    if not SMS_SENDER_API_KEY and not DASHBOARD_PASSWORD:
+        return "public"
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Master Admin API Key or Dashboard Auth is required for this operation"
+    )
 
 class KeyCreateRequest(BaseModel):
     app_name: str
@@ -856,26 +880,33 @@ def query_at_command(ser, cmd, timeout=3):
     ser.timeout = orig_timeout
     return "\n".join(response_lines) if response_lines else None
 
-def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=10):
+def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=5, fast_init=False):
     ser = serial.Serial(port, baud, timeout=timeout)
     ser.reset_input_buffer()
     ser.reset_output_buffer()
     
     # Send ESC to cancel any active SMS input prompt (> prompt)
     ser.write(b'\x1b\r\n')
-    time.sleep(0.3)
+    time.sleep(0.1)
     ser.read_all()
-    
-    # Auto-baud sync sequence: Send 'AT' multiple times to lock SIM800L auto-bauding
-    synced = False
-    for attempt in range(5):
+
+    if fast_init:
         ser.reset_input_buffer()
         ser.write(b'AT\r\n')
-        time.sleep(0.3)
+        time.sleep(0.15)
+        ser.read_all()
+        send_at_command(ser, "ATE0", timeout=1)
+        return ser
+    
+    # Auto-baud sync sequence: Send 'AT' to lock SIM800L auto-bauding
+    synced = False
+    for attempt in range(3):
+        ser.reset_input_buffer()
+        ser.write(b'AT\r\n')
+        time.sleep(0.2)
         res = ser.read_all().decode(errors="ignore")
         if "OK" in res or "AT" in res:
             synced = True
-            logger.info("SIM800L serial sync successful")
             break
             
     # If sync failed, SIM800L may have locked onto Pi bootloader noise at 115200 baud
@@ -883,10 +914,10 @@ def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=10):
         logger.warning("Failed 9600 baud sync. Attempting 115200 baud recovery...")
         try:
             ser.baudrate = 115200
-            for attempt in range(3):
+            for attempt in range(2):
                 ser.reset_input_buffer()
                 ser.write(b'AT+IPR=9600\r\n')
-                time.sleep(0.3)
+                time.sleep(0.2)
                 res = ser.read_all().decode(errors="ignore")
                 if "OK" in res or "AT" in res:
                     logger.info("Forced SIM800L back from 115200 to 9600 baud")
@@ -895,18 +926,12 @@ def get_serial_device(port=SERIAL_PORT, baud=BAUD_RATE, timeout=10):
             logger.error(f"Baud recovery exception: {e}")
         finally:
             ser.baudrate = baud
-            time.sleep(0.3)
-
-    # Permanently lock baud rate to 9600 in SIM800L non-volatile memory (EEPROM)
-    send_at_command(ser, "AT+IPR=9600", timeout=2)
-    send_at_command(ser, "AT&W", timeout=2)
+            time.sleep(0.2)
 
     # Disable local echo to prevent command loops/responses in output
     send_at_command(ser, "ATE0", timeout=2)
     # Enable verbose error reporting
     send_at_command(ser, "AT+CMEE=2", timeout=2)
-    # Force full RF & SIM functionality (exit minimum functionality / flight mode)
-    send_at_command(ser, "AT+CFUN=1", timeout=3)
     return ser
 
 
@@ -993,17 +1018,28 @@ def trigger_gpio_reset(pin=RESET_GPIO_PIN):
     return False, f"GPIO pin {pin} unmapped or inaccessible inside container"
 
 def trigger_at_reset():
-    with serial_lock:
+    acquired = serial_lock.acquire(timeout=3.0)
+    if not acquired:
+        return False, "Serial lock busy, reset deferred"
+    try:
+        ser = None
         try:
             ser = get_serial_device(timeout=5)
             send_at_command(ser, "AT+CFUN=1,1", timeout=5)
-            time.sleep(2)
-            ser.close()
+            time.sleep(1)
             logger.info("Software AT reset command (AT+CFUN=1,1) issued to SIM800L")
             return True, "Software AT reset executed (AT+CFUN=1,1)"
-        except Exception as e:
-            logger.error(f"AT software reset failed: {e}")
-            return False, f"AT soft reset error: {str(e)}"
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.error(f"AT software reset failed: {e}")
+        return False, f"AT soft reset error: {str(e)}"
+    finally:
+        serial_lock.release()
 
 def reset_sim800_module():
     gpio_ok, gpio_msg = trigger_gpio_reset()
@@ -1068,13 +1104,20 @@ def get_open_api_endpoint(auth: HTTPBasicCredentials = Depends(verify_dashboard_
     description="Verifies container health and performs comprehensive hardware diagnostic tests on the SIM800L module."
 )
 def health_check():
-    with serial_lock:
+    acquired = serial_lock.acquire(timeout=1.5)
+    if not acquired:
+        return {
+            "status": "busy",
+            "hardware": "SIM800L serial port is actively processing a request or polling SMS",
+            "details": {"info": "Serial lock busy"}
+        }
+    try:
+        ser = None
         try:
-            ser = get_serial_device(timeout=3)
+            ser = get_serial_device(timeout=2)
             
             # 1. Basic UART test
             if not send_at_command(ser, "AT"):
-                ser.close()
                 return {
                     "status": "unhealthy",
                     "hardware": "SIM800L module defective or not responding to AT commands (Check power & TX/RX wiring)",
@@ -1084,17 +1127,17 @@ def health_check():
             details = {}
             
             # 2. Module Info Check (ATI)
-            ati = query_at_command(ser, "ATI", timeout=2)
+            ati = query_at_command(ser, "ATI", timeout=1.5)
             if ati:
                 details["module_info"] = ati.replace("\r", " ").replace("\n", " ").strip()
                 
             # 3. Power Supply Voltage Check (AT+CBC)
-            cbc = query_at_command(ser, "AT+CBC", timeout=2)
+            cbc = query_at_command(ser, "AT+CBC", timeout=1.5)
             if cbc:
                 details["power_supply"] = cbc.replace("\r", " ").replace("\n", " ").strip()
                 
             # 4. SIM Card Status (AT+CPIN?)
-            cpin = query_at_command(ser, "AT+CPIN?", timeout=2)
+            cpin = query_at_command(ser, "AT+CPIN?", timeout=1.5)
             sim_ok = False
             if cpin:
                 cpin_clean = cpin.replace("\r", " ").replace("\n", " ").strip()
@@ -1105,17 +1148,15 @@ def health_check():
                 details["sim_card"] = "No response from SIM card"
                 
             # 5. Signal Quality (AT+CSQ)
-            csq = query_at_command(ser, "AT+CSQ", timeout=2)
+            csq = query_at_command(ser, "AT+CSQ", timeout=1.5)
             if csq:
                 details["signal_quality"] = csq.replace("\r", " ").replace("\n", " ").strip()
                 
             # 6. Network Registration (AT+CREG?)
-            creg = query_at_command(ser, "AT+CREG?", timeout=2)
+            creg = query_at_command(ser, "AT+CREG?", timeout=1.5)
             if creg:
                 details["network_registration"] = creg.replace("\r", " ").replace("\n", " ").strip()
                 
-            ser.close()
-            
             if not sim_ok:
                 return {
                     "status": "degraded",
@@ -1129,8 +1170,16 @@ def health_check():
                 "hardware": "SIM800L module fully functional",
                 "details": details
             }
-        except Exception as e:
-            return {"status": "error", "error": str(e)}
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    finally:
+        serial_lock.release()
 
 @app.post(
     "/api/hardware/reset",
@@ -1332,14 +1381,18 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
 
     app_name = resolve_app_name(request, api_key)
 
-    with serial_lock:
-        logger.info(f"Received request from [{app_name}] to send SMS to {payload.phone_number}")
+    acquired = serial_lock.acquire(timeout=10.0)
+    if not acquired:
+        raise HTTPException(status_code=503, detail="SIM800L serial port actively in use. Please retry in a few seconds.")
+    
+    logger.info(f"Received request from [{app_name}] to send SMS to {payload.phone_number}")
+    ser = None
+    try:
         try:
             ser = get_serial_device(timeout=10)
             
             # Test communication
             if not send_at_command(ser, "AT"):
-                ser.close()
                 raise HTTPException(status_code=502, detail="SIM800L hardware not responding")
                 
             # Wait for SIM card to finish initializing if busy or in CFUN 0/4 state
@@ -1369,7 +1422,6 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 cpin_res = query_at_command(ser, "AT+CPIN?", timeout=2)
                 creg_res = query_at_command(ser, "AT+CREG?", timeout=2)
                 csq_res = query_at_command(ser, "AT+CSQ", timeout=2)
-                ser.close()
                 
                 detail_msg = "Failed to set GSM text mode."
                 diagnostics = []
@@ -1408,7 +1460,6 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
             # Wait for carrier response (can take several seconds)
             time.sleep(4)
             response = ser.read_all().decode(errors="ignore")
-            ser.close()
             
             logger.info(f"Carrier Response: {response.strip()}")
             
@@ -1459,9 +1510,16 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                     status_code=500,
                     detail=err_text
                 )
-                
-        except Exception as e:
-            logger.error(f"Error executing SMS dispatch: {e}")
-            if isinstance(e, HTTPException):
-                raise e
-            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.error(f"Error executing SMS dispatch: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        serial_lock.release()

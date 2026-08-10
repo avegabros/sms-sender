@@ -567,17 +567,13 @@
     // Load App API Keys
     async function refreshKeys() {
       const key = localStorage.getItem('sms_sender_api_key');
-      if (!key) {
-        keysManagerUnauthorized.style.display = 'block';
-        keysManagerUnauthorized.textContent = 'Please configure and save your Master Admin Key in the API Authentication section to manage application API keys.';
-        keysManagerContent.style.display = 'none';
-        return;
+      const headers = {};
+      if (key) {
+        headers['X-API-Key'] = key;
       }
 
       try {
-        const response = await fetch(getApiUrl('/api/keys'), {
-          headers: { 'X-API-Key': key }
-        });
+        const response = await fetch(getApiUrl('/api/keys'), { headers });
 
         if (response.ok) {
           const keys = await response.json();
@@ -645,10 +641,14 @@
 
     async function revokeKey(app) {
       const key = localStorage.getItem('sms_sender_api_key');
+      const headers = {};
+      if (key) {
+        headers['X-API-Key'] = key;
+      }
       try {
         const response = await fetch(getApiUrl(`/api/keys/${encodeURIComponent(app)}`), {
           method: 'DELETE',
-          headers: { 'X-API-Key': key }
+          headers: headers
         });
         if (response.ok) {
           showToast(`Key for ${app} revoked`, 'success');
@@ -670,13 +670,14 @@
       }
 
       const key = localStorage.getItem('sms_sender_api_key');
+      const headers = { 'Content-Type': 'application/json' };
+      if (key) {
+        headers['X-API-Key'] = key;
+      }
       try {
         const response = await fetch(getApiUrl('/api/keys'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': key
-          },
+          headers: headers,
           body: JSON.stringify({ app_name: appName })
         });
 
