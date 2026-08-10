@@ -1527,20 +1527,46 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
             send_at_command(ser, 'AT+CSCS="GSM"')
                 
             # Send recipient number
+            ser.reset_input_buffer()
             ser.write(f'AT+CMGS="{payload.phone_number}"\r\n'.encode())
-            time.sleep(0.5)
+            
+            # Wait up to 3s for > prompt
+            prompt_found = False
+            start_p = time.time()
+            while time.time() - start_p < 3:
+                p_line = ser.readline().decode(errors="ignore")
+                if ">" in p_line:
+                    prompt_found = True
+                    break
             
             # Write SMS body and terminate with Ctrl+Z (ASCII 26)
             ser.write((payload.message + chr(26)).encode())
-            logger.info("Transmitting message payload...")
+            logger.info("Transmitting message payload over GSM network...")
             
-            # Wait for carrier response (can take several seconds)
-            time.sleep(4)
-            response = ser.read_all().decode(errors="ignore")
+            # Wait up to 15 seconds for carrier response line-by-line
+            response_lines = []
+            start_t = time.time()
+            ser.timeout = 1.0
             
-            logger.info(f"Carrier Response: {response.strip()}")
+            while time.time() - start_t < 15:
+                raw_l = ser.readline()
+                if raw_l:
+                    l = raw_l.decode(errors="ignore").strip()
+                    if l:
+                        response_lines.append(l)
+                        logger.info(f"CMGS Transmit Response Line: {l}")
+                        if "+CMGS:" in l or "OK" in l or "ERROR" in l or "Call Ready" in l:
+                            # Read any trailing OK line
+                            time.sleep(0.3)
+                            extra = ser.read_all().decode(errors="ignore").strip()
+                            if extra:
+                                response_lines.append(extra)
+                            break
+
+            response = "\n".join(response_lines)
+            logger.info(f"Full Carrier Response: {response.strip()}")
             
-            if "+CMGS:" in response:
+            if "+CMGS:" in response or ("OK" in response and prompt_found):
                 add_history_record({
                     "id": f"sms_{int(time.time())}_{secrets.token_hex(4)}",
                     "timestamp": datetime.datetime.now().isoformat(),
