@@ -1097,7 +1097,12 @@ def get_integration_guide(auth: HTTPBasicCredentials = Depends(verify_dashboard_
 
 @app.get("/docs", include_in_schema=False)
 def get_swagger_documentation(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)):
-    return get_swagger_ui_html(openapi_url="/openapi.json", title="SMS Sender API - Docs")
+    resp = get_swagger_ui_html(openapi_url="/openapi.json", title="SMS Sender API - Docs")
+    html = resp.body.decode("utf-8")
+    # Inject URL credential sanitizer script to prevent browser fetch credential security exception when URL contains user:pass@
+    sanitizer_script = "<script>if(window.location.href.includes('@')){history.replaceState(null,'',window.location.pathname+window.location.search);}</script></head>"
+    html = html.replace("</head>", sanitizer_script, 1)
+    return HTMLResponse(content=html, status_code=200)
 
 @app.get("/redoc", include_in_schema=False)
 def get_redoc_documentation(auth: HTTPBasicCredentials = Depends(verify_dashboard_auth)):
