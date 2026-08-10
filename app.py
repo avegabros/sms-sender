@@ -1183,6 +1183,16 @@ def health_check():
             if creg:
                 details["network_registration"] = creg.replace("\r", " ").replace("\n", " ").strip()
                 
+            # 7. Carrier Credit Readiness Check
+            send_at_command(ser, "AT+CUSD=1", timeout=1)
+            send_at_command(ser, 'AT+CUSD=1,"*143#",15', timeout=1.5)
+            time.sleep(0.5)
+            ussd_buf = ser.read_all().decode(errors="ignore")
+            if "+CUSD: 2" in ussd_buf:
+                details["credit_status"] = "Warning: USSD terminated (+CUSD: 2). Ensure active load or text promo."
+            else:
+                details["credit_status"] = "Active / Available"
+                
             if not sim_ok:
                 return {
                     "status": "degraded",

@@ -338,8 +338,11 @@
 
   <header>
     <h1><span class="logo-highlight">SMS</span> Sender Gateway</h1>
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
       <button id="reset-sim800-btn" class="btn-reset">🔄 Reset SIM800L</button>
+      <div class="badge" id="credit-badge" style="background: rgba(52, 211, 153, 0.1); border-color: rgba(52, 211, 153, 0.2);">
+        <span id="credit-text" style="color: #34d399; font-weight: 500;">💳 Load Credit: Active</span>
+      </div>
       <div class="badge" id="status-badge">
         <div class="badge-dot" id="status-dot"></div>
         <span id="status-text">Checking Status...</span>
@@ -356,10 +359,6 @@
       <a href="/settings" class="tab-item">⚙️ Settings</a>
     </div>
   </nav>
-
-
-
-
 
   <main>
     <!-- Config Card -->
@@ -390,6 +389,21 @@
       </div>
 
       <button class="btn" id="send-sms-btn">Send Message</button>
+    </div>
+
+    <!-- Diagnostic & Carrier Tools Card -->
+    <div class="card span-full">
+      <div class="card-title">Hardware Diagnostics & Carrier Tools</div>
+      <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+        <button class="btn" id="run-diagnostic-btn" style="background: #2563eb; width: auto;">🔍 Run Full Modem Diagnostic</button>
+        <div style="flex-grow: 1; display: flex; gap: 0.5rem; align-items: flex-end; min-width: 250px;">
+          <div style="flex-grow: 1;">
+            <label for="ussd-input" style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Query USSD Code</label>
+            <input type="text" id="ussd-input" value="*143#" placeholder="e.g. *143# or *123#">
+          </div>
+          <button class="btn" id="run-ussd-btn" style="white-space: nowrap; width: auto; height: 42px;">💳 Query USSD</button>
+        </div>
+      </div>
     </div>
 
     <!-- Keys Manager Card -->
@@ -542,6 +556,9 @@
       return window.location.origin + path;
     }
 
+    const creditBadge = document.getElementById('credit-badge');
+    const creditText = document.getElementById('credit-text');
+
     // Health check checker
     async function checkHealth() {
       try {
@@ -556,6 +573,25 @@
           statusDot.style.backgroundColor = 'var(--warning)';
           statusDot.className = 'badge-dot';
           statusText.textContent = `SIM800L: ${data.error || 'No response'}`;
+        }
+
+        if (data && data.details && data.details.credit_status) {
+          const statusStr = data.details.credit_status;
+          if (statusStr.includes('Warning') || statusStr.includes('CUSD: 2')) {
+            if (creditBadge) {
+              creditBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+              creditBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+              creditText.style.color = 'var(--warning)';
+              creditText.textContent = '💳 Credit Warning: Check Load / USSD (*143#)';
+            }
+          } else {
+            if (creditBadge) {
+              creditBadge.style.background = 'rgba(52, 211, 153, 0.1)';
+              creditBadge.style.borderColor = 'rgba(52, 211, 153, 0.2)';
+              creditText.style.color = '#34d399';
+              creditText.textContent = '💳 Load Credit: Active';
+            }
+          }
         }
       } catch (err) {
         statusDot.style.backgroundColor = 'var(--error)';
@@ -787,9 +823,73 @@
         } finally {
           resetSim800Btn.disabled = false;
         }
+    // Diagnostic and USSD handlers
+    const runDiagnosticBtn = document.getElementById('run-diagnostic-btn');
+    const runUssdBtn = document.getElementById('run-ussd-btn');
+    const ussdInput = document.getElementById('ussd-input');
+
+    if (runDiagnosticBtn) {
+      runDiagnosticBtn.addEventListener('click', async () => {
+        runDiagnosticBtn.disabled = true;
+        runDiagnosticBtn.textContent = 'Running Scan...';
+        showToast('Running full modem diagnostic...', 'info');
+        logToConsole('Executing hardware diagnostic scan (/api/debug/inbox-poll)...', 'info');
+
+        try {
+          const key = localStorage.getItem('sms_sender_api_key');
+          const headers = {};
+          if (key) headers['X-API-Key'] = key;
+
+          const res = await fetch(getApiUrl('/api/debug/inbox-poll'), { headers });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast('Diagnostic Scan Completed', 'success');
+            logToConsole(`DIAGNOSTIC TRACE:\n${JSON.stringify(data.trace, null, 2)}`, 'success');
+          } else {
+            showToast('Diagnostic Failed', 'error');
+            logToConsole(`ERROR: ${data.error || JSON.stringify(data)}`, 'error');
+          }
+        } catch (err) {
+          showToast('Diagnostic connection error', 'error');
+          logToConsole(`CRITICAL: Diagnostic request failed. ${err.message}`, 'error');
+        } finally {
+          runDiagnosticBtn.disabled = false;
+          runDiagnosticBtn.textContent = '🔍 Run Full Modem Diagnostic';
+        }
       });
     }
 
+    if (runUssdBtn) {
+      runUssdBtn.addEventListener('click', async () => {
+        const code = ussdInput.value.trim() || '*143#';
+        runUssdBtn.disabled = true;
+        runUssdBtn.textContent = 'Querying...';
+        showToast(`Querying USSD ${code}...`, 'info');
+        logToConsole(`Sending USSD command: ${code}...`, 'info');
+
+        try {
+          const key = localStorage.getItem('sms_sender_api_key');
+          const headers = {};
+          if (key) headers['X-API-Key'] = key;
+
+          const res = await fetch(getApiUrl(`/api/debug/ussd?code=${encodeURIComponent(code)}`), { headers });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast('USSD Query Complete', 'success');
+            logToConsole(`USSD RESPONSE (${code}):\n${data.raw_response}`, 'success');
+          } else {
+            showToast('USSD Query Failed', 'error');
+            logToConsole(`ERROR: ${data.error || JSON.stringify(data)}`, 'error');
+          }
+        } catch (err) {
+          showToast('USSD connection error', 'error');
+          logToConsole(`CRITICAL: USSD request failed. ${err.message}`, 'error');
+        } finally {
+          runUssdBtn.disabled = false;
+          runUssdBtn.textContent = '💳 Query USSD';
+        }
+      });
+    }
 
     // Run health checks and load keys on init
     checkHealth();
