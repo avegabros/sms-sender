@@ -1568,6 +1568,12 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 
             # Set character set to GSM
             send_at_command(ser, 'AT+CSCS="GSM"')
+            
+            # Ensure SMS Service Center Address (SMSC) is set (Globe default: +639170000130)
+            csca = query_at_command(ser, "AT+CSCA?", timeout=2)
+            if not csca or '"+63' not in csca:
+                logger.info("Initializing SMSC Service Center to Globe default (+639170000130)...")
+                send_at_command(ser, 'AT+CSCA="+639170000130"', timeout=2)
                 
             # Send recipient number
             ser.reset_input_buffer()
