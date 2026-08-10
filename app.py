@@ -531,8 +531,7 @@ def poll_inbox_messages():
             ser = get_serial_device(timeout=4, fast_init=True)
             send_at_command(ser, "AT+CMGF=1", timeout=2)
             send_at_command(ser, 'AT+CPMS="SM","SM","SM"', timeout=2)
-            send_at_command(ser, 'AT+CNMI=2,1,0,0,0', timeout=2)
-            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=8)
+            raw_res = query_at_command(ser, 'AT+CMGL="ALL"', timeout=5)
             if raw_res and "+CMGL:" in raw_res:
                 logger.info(f"[INBOX POLL] Discovered SMS raw response: {repr(raw_res)}")
                 parsed_messages = parse_cmgl_response(raw_res)
@@ -540,8 +539,8 @@ def poll_inbox_messages():
                     logger.info(f"Discovered {len(parsed_messages)} incoming SMS message(s) on SIM800L")
                     for msg in parsed_messages:
                         save_inbox_message(msg)
-            # Always purge SIM card memory so SIM card capacity remains 0/40 and never blocks incoming carrier SMS
-            send_at_command(ser, "AT+CMGD=1,4", timeout=4)
+                    # Delete messages from SIM memory ONLY after they have been parsed & stored into SQLite
+                    send_at_command(ser, "AT+CMGD=1,4", timeout=3)
         finally:
             if ser and ser.is_open:
                 try:
@@ -1524,9 +1523,8 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 })
                 raise HTTPException(status_code=502, detail=detail_msg)
                 
-            # Set character set to GSM & SMS Text Parameters (Validity 1 day, Standard DCS)
+            # Set character set to GSM
             send_at_command(ser, 'AT+CSCS="GSM"')
-            send_at_command(ser, 'AT+CSMP=17,168,0,0')
                 
             # Send recipient number
             ser.reset_input_buffer()
