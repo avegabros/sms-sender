@@ -1566,8 +1566,8 @@ def send_sms(payload: SMSRequest, request: Request, api_key: str = Depends(verif
                 })
                 raise HTTPException(status_code=502, detail=detail_msg)
                 
-            # Set character set to GSM
-            send_at_command(ser, 'AT+CSCS="GSM"')
+            # Set character set to IRA (ASCII standard for phone numbers & text)
+            send_at_command(ser, 'AT+CSCS="IRA"')
             
             # Ensure SMS Service Center Address (SMSC) is set (Globe default: +639170000130)
             csca = query_at_command(ser, "AT+CSCA?", timeout=2)
