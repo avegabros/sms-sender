@@ -92,6 +92,8 @@ def init_db():
     with db_lock:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
@@ -965,9 +967,6 @@ def create_api_key(payload: KeyCreateRequest, admin_key: str = Depends(verify_ad
     app_name = payload.app_name.strip()
     if not app_name:
         raise HTTPException(status_code=400, detail="Application name cannot be empty")
-    keys_data = load_keys()
-    if app_name in keys_data:
-        raise HTTPException(status_code=400, detail="Key already exists for this application")
     new_key = secrets.token_hex(16)
     save_key(app_name, new_key)
     return {"app_name": app_name, "key": new_key}
